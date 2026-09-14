@@ -1,0 +1,74 @@
+name: Build Windows Installer 0.1.4
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Download FFmpeg and FFprobe
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = Join-Path $env:RUNNER_TEMP 'ffmpeg.zip'
+          $extract = Join-Path $env:RUNNER_TEMP 'ffmpeg'
+          Invoke-WebRequest -Uri 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip' -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $extract -Force
+          $ffmpeg = Get-ChildItem $extract -Recurse -Filter ffmpeg.exe | Select-Object -First 1
+          $ffprobe = Get-ChildItem $extract -Recurse -Filter ffprobe.exe | Select-Object -First 1
+          if (-not $ffmpeg -or -not $ffprobe) { throw 'FFmpeg/FFprobe not found after extraction.' }
+          $tools = Join-Path $PWD 'src\SlideshowCreator\Tools'
+          New-Item -ItemType Directory -Force -Path $tools | Out-Null
+          Copy-Item $ffmpeg.FullName (Join-Path $tools 'ffmpeg.exe') -Force
+          Copy-Item $ffprobe.FullName (Join-Path $tools 'ffprobe.exe') -Force
+
+      - name: Publish self-contained Windows app
+        shell: pwsh
+        run: |
+          dotnet restore .\src\SlideshowCreator\SlideshowCreator.csproj
+          dotnet publish .\src\SlideshowCreator\SlideshowCreator.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+
+      - name: Verify publish payload
+        shell: pwsh
+        run: |
+          $pub = '.\src\SlideshowCreator\bin\Release\net8.0-windows\win-x64\publish'
+          if (-not (Test-Path "$pub\SlideshowCreator.exe")) { throw 'SlideshowCreator.exe missing.' }
+          if (-not (Test-Path "$pub\Tools\ffmpeg.exe")) { throw 'ffmpeg.exe missing.' }
+          if (-not (Test-Path "$pub\Tools\ffprobe.exe")) { throw 'ffprobe.exe missing.' }
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build installer EXE
+        shell: pwsh
+        run: |
+          $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) { throw 'Inno Setup compiler not found.' }
+          & $iscc '.\installer.iss'
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with code $LASTEXITCODE" }
+          if (-not (Test-Path '.\OUTPUT\SlideshowCreator-Setup-0.1.4.exe')) { throw 'Installer EXE was not generated.' }
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: SlideshowCreator-Setup-0.1.4
+          path: OUTPUT/SlideshowCreator-Setup-0.1.4.exe
+          if-no-files-found: error
+          retention-days: 30
