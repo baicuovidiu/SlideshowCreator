@@ -227,3 +227,25 @@ Acest fișier este sursa canonică de adevăr. La fiecare idee acceptată:
 2. se marchează implementată doar după cod;
 3. se marchează validată doar după test cu material real;
 4. nicio versiune nouă nu elimină tacit o cerință existentă.
+
+
+## 21. CARUSEL Engine 2 — decizie de reconstrucție (2026-09-19)
+Testul real 0.1.10 a arătat că actualul CARUSEL este prea banal/repetitiv și că suprapunerile pot obtura din nou o fotografie. Implementarea existentă NU este considerată conformă.
+
+CARUSEL Automat nu mai este definit ca alegere dintr-o listă mică de preseturi. Devine motor parametric de coregrafie a planurilor. Variația se generează controlat din:
+- geometrie/layout: 50/50, 60/40, 70/30, mare+mic, mare+2 mici, mare+3 mici, 2×2, L/T, asimetric, diagonal sigur;
+- număr de planuri: 2–4;
+- ordine și direcții independente de intrare/ieșire;
+- timing uniform/neuniform, stagger și viteze diferite;
+- repoziționare și schimb de roluri;
+- prioritate vizuală/Z-order dinamică;
+- familii de evoluție: 4→2→1, 4→1, 2→4→2, 1→4→1, 2→1→2, 1→3→1;
+- revenire fluidă la Full Frame.
+
+REGULĂ DE VIZIBILITATE: o fotografie aflată în spate nu poate rămâne inutil obturată. Dacă planurile se suprapun, motorul trebuie să alterneze prioritatea prin Z-order + repoziționare/reveal, astfel încât fiecare imagine să aibă un interval clar de lectură. Simplul overlay static nu este acceptabil.
+
+REGULĂ DE VARIETATE: un montaj lung nu trebuie să pară aceeași schemă repetată. Motorul ține istoric al geometriei, direcțiilor și familiei de mișcare și evită repetițiile apropiate.
+
+REGULĂ DE CALITATE: toate variațiile păstrează fotografia completă prin contain; nici creativitatea, nici geometria nu justifică crop automat distructiv.
+
+Această secțiune este obligatorie pentru 0.1.11+ și are prioritate față de implementarea veche bazată pe câteva preseturi fixe.
