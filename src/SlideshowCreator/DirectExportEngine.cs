@@ -86,6 +86,10 @@ public static class DirectExportEngine
             var graphMain=SlideshowRenderEngine.BuildPhotoFilter(sequence);
             var graphFile=Path.Combine(dir,"timeline.ffscript");
             File.WriteAllText(graphFile,graphMain);
+            // Cheap syntax/input preflight before the expensive full render.
+            progress?.Invoke(36,"Preflight timeline...");
+            ffmpeg($"-y {inputArgs} -filter_complex_script \"{graphFile}\" -map \"[outv]\" -frames:v 1 -an -c:v {encoder} -preset {preset} -pix_fmt yuv420p -f null NUL");
+            progress?.Invoke(40,$"Randare directă • {sequence.Count} segmente...");
             ffmpeg($"-y {inputArgs} -filter_complex_script \"{graphFile}\" -map \"[outv]\" -an -c:v {encoder} -preset {preset} -pix_fmt yuv420p \"{visual}\"");
 
             progress?.Invoke(86,"Finalizare într-o singură trecere...");
