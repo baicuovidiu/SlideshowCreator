@@ -40,7 +40,12 @@ public static class DirectExportEngine
                         var inputs=source.Skip(i).Take(take).ToArray();
                         var dur=Math.Max(5.0,Math.Min(9.0,4.5+take*.06));
                         var outp=Path.Combine(dir,$"engine2_{carouselCount++:000}.mp4");
-                        var graph=CompositionRenderEngine.BuildWall(inputs,dur,recipe.Motion==CarouselMotion.HeartPulse);
+                        var graph=recipe.Motion switch
+                        {
+                            CarouselMotion.SpeedTrain => CompositionRenderEngine.BuildSpeedTrain(inputs,dur,recipe.Reverse),
+                            CarouselMotion.SpinBurst or CarouselMotion.ExplodeReassemble or CarouselMotion.WallShatter => CompositionRenderEngine.BuildSpinBurst(inputs,dur,recipe.Reverse),
+                            _ => CompositionRenderEngine.BuildWall(inputs,dur,recipe.Motion==CarouselMotion.HeartPulse)
+                        };
                         ffmpeg($"-y {Inputs(inputs)} -filter_complex \"{graph}\" -map \"[outv]\" -an -c:v {encoder} -preset {preset} -pix_fmt yuv420p \"{outp}\"");
                         sequence.Add(CloneRendered(m,outp,dur));
                         i+=take-1;
