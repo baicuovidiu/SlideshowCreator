@@ -19,6 +19,9 @@ PrivilegesRequired=lowest
 WizardStyle=modern
 UninstallDisplayIcon={app}\{#AppExeName}
 SetupLogging=yes
+CloseApplications=yes
+RestartApplications=no
+CloseApplicationsFilter=SlideshowCreator.exe
 
 [Files]
 Source: "src\SlideshowCreator\bin\Release\net8.0-windows\win-x64\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
