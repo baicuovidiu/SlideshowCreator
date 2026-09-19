@@ -317,3 +317,13 @@ Regulă creativă: motorul automat alternează momente calme cu izbucniri scurte
 Regulă de varietate: geometria, numărul de imagini, direcțiile, rotația, viteza, stagger-ul, ordinea, Z-order-ul, traseele și familia de mișcare sunt parametri recombinabili. Sistemul păstrează istoric recent și evită repetarea perceptibilă.
 
 Regulă fundamentală: fotografia originală rămâne completă și proporțională. Nicio familie spectaculoasă nu justifică crop automat distructiv, deformare sau ascunderea inutilă/prelungită a unei fotografii.
+
+
+## 24. Elemente deja reușite — protejate împotriva regresiilor
+Următoarele comportamente sunt acceptate de utilizator și devin cerințe obligatorii de regresie pentru toate versiunile următoare:
+- Muzica intră progresiv la început (audio fade-in), fără pornire brutală.
+- Muzica iese progresiv la final (audio fade-out), fără tăiere brutală.
+- Prima imagine intră progresiv/elegant; montajul nu începe ca un tablou afișat instantaneu.
+- Ultima imagine iese progresiv/elegant; montajul nu se termină prin dispariție/tăiere brutală.
+- Reconstrucția motorului de export și CARUSEL Engine 2 nu au voie să elimine sau să degradeze aceste patru comportamente.
+- Testul de regresie pentru fiecare installer: verificare început video, început audio, sfârșit video și sfârșit audio înainte ca versiunea să fie considerată validată.
