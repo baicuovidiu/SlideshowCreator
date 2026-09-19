@@ -57,6 +57,18 @@ jobs:
           & $iscc '.\installer.iss'
           if ($LASTEXITCODE -ne 0) { throw "ISCC failed with code $LASTEXITCODE" }
           if (-not (Test-Path '.\OUTPUT\SlideshowCreator-Setup-0.1.11.exe')) { throw 'Installer EXE was not generated.' }
+      - name: Smoke test packaged app
+        shell: pwsh
+        run: |
+          $pub = '.\src\SlideshowCreator\bin\Release\net8.0-windows\win-x64\publish'
+          & "$pub\Tools\ffmpeg.exe" -hide_banner -version
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged FFmpeg smoke test failed.' }
+          & "$pub\Tools\ffprobe.exe" -hide_banner -version
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged FFprobe smoke test failed.' }
+          $size = (Get-Item '.\OUTPUT\SlideshowCreator-Setup-0.1.11.exe').Length
+          if ($size -lt 50000000) { throw "Installer unexpectedly small: $size bytes" }
+          Get-FileHash '.\OUTPUT\SlideshowCreator-Setup-0.1.11.exe' -Algorithm SHA256
+
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
