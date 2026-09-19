@@ -92,7 +92,7 @@ public static class DirectExportEngine
             progress?.Invoke(40,$"Randare directă • {sequence.Count} segmente...");
             ffmpeg($"-y {inputArgs} -filter_complex_script \"{graphFile}\" -map \"[outv]\" -an -c:v {encoder} -preset {preset} -pix_fmt yuv420p \"{visual}\"");
 
-            progress?.Invoke(86,"Finalizare într-o singură trecere...");
+            progress?.Invoke(86,"Finalizare imagine + audio...");
             var total=probe(visual);
             var intro=Math.Min(1.25,Math.Max(.25,total*.12));
             var outro=Math.Min(1.8,Math.Max(.35,total*.15));
