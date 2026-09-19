@@ -83,7 +83,9 @@ public static class DirectExportEngine
             var visual=Path.Combine(dir,"visual.mp4");
             var inputArgs=Inputs(sequence);
             var graphMain=SlideshowRenderEngine.BuildPhotoFilter(sequence);
-            ffmpeg($"-y {inputArgs} -filter_complex \"{graphMain}\" -map \"[outv]\" -an -c:v {encoder} -preset {preset} -pix_fmt yuv420p \"{visual}\"");
+            var graphFile=Path.Combine(dir,"timeline.ffscript");
+            File.WriteAllText(graphFile,graphMain);
+            ffmpeg($"-y {inputArgs} -filter_complex_script \"{graphFile}\" -map \"[outv]\" -an -c:v {encoder} -preset {preset} -pix_fmt yuv420p \"{visual}\"");
 
             progress?.Invoke(86,"Finalizare într-o singură trecere...");
             var total=probe(visual);
