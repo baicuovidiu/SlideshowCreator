@@ -276,3 +276,19 @@ Pentru proiecte mari, motorul poate folosi 6, 8, 12, 16, 20, 24, 30+ sau toate f
 REGULĂ: „toate una lângă alta” nu înseamnă că toate trebuie să fie simultan suficient de mari pentru examinare individuală. Secvența poate plimba viewport-ul/canvas-ul printr-un wall mai mare decât cadrul 1920×1080, astfel încât fotografiile să devină lizibile pe parcurs. Fotografiile individuale rămân complete (contain), fără crop distructiv.
 
 CARUSEL Automat trebuie să combine aceste familii cu motorul 2–4 planuri și Full Frame, generând zeci de combinații, cu memorie anti-repetiție pentru familie, geometrie, direcție, ritm și ordine. Un montaj lung trebuie să evolueze vizual, nu să repete trei formule.
+
+
+### 22.1 Mișcări cinematice suplimentare pentru WALL/CARUSEL
+Obligatoriu:
+- ROTATION FLOW: grupuri sau benzi de fotografii complete se rotesc lent ca ansamblu; rotația nu deformează și nu cropează fotografia individuală.
+- DIAGONAL SLIDE PARADE: 3–12+ fotografii complete defilează simultan pe diagonală, ca diapozitive independente, cu spațiere controlată; pot intra dintr-un colț și ieși prin colțul opus.
+- DIAGONAL FILM STRIP: bandă virtuală înclinată cu fotografii necropate, deplasată continuu prin cadru; pot exista două sau mai multe benzi cu sensuri/viteze diferite.
+- ROTATING WALL: wall/mozaic mai mare decât viewport-ul se poate roti lent în timp ce viewport-ul îl traversează.
+- FAN / EVANTAI: mai multe fotografii complete se deschid în evantai prin rotație + translație, apoi se strâng sau una devine Full Frame.
+- CARD STREAM: fotografii complete trec succesiv ca diapozitive/carduri, cu rotații discrete individuale și fără obturare permanentă.
+- SPIRAL / ARC FLOW: grupurile urmează arce/spirale largi; fiecare fotografie rămâne dreptunghi complet și lizibil.
+- DIAGONAL CROSSING: două fluxuri diagonale independente se intersectează cu prioritate/reveal controlată, fără ca un flux să ascundă permanent celălalt.
+
+Rotația poate aparține planului, grupului sau canvas-ului virtual. Trebuie să existe limite estetice configurabile: rotații mici/elegante pentru fotografiile individuale și rotații mai ample numai pentru mișcarea ansamblului. Motorul automat variază sensul, unghiul, viteza, stagger-ul, distanța și numărul de imagini și evită repetarea apropiată.
+
+Toate aceste familii respectă regula FOTO COMPLETĂ / CONTAIN / FĂRĂ CROP AUTOMAT DISTRUCTIV.
