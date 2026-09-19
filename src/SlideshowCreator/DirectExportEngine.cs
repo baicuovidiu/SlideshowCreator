@@ -120,5 +120,9 @@ public static class DirectExportEngine
         return $"-ss {F(m.TrimIn)} -t {F(m.Duration)} -i \"{m.Path}\"";
     }
 
-    static string F(double n)=>n.ToString("0.###",CultureInfo.InvariantCulture);
+    static string F(double n)
+    {
+        var s=n.ToString("0.###",CultureInfo.InvariantCulture);
+        return s.StartsWith(".")?"0"+s:s.StartsWith("-.")?"-0"+s[1..]:s;
+    }
 }
