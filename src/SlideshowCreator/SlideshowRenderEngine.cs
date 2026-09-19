@@ -66,5 +66,5 @@ public static class SlideshowRenderEngine
         _ => "fade"
     };
 
-    static string F(double value) => value.ToString("0.###", CultureInfo.InvariantCulture);
+    static string F(double value) { var s=value.ToString("0.###",CultureInfo.InvariantCulture); return s.StartsWith(".")?"0"+s:s.StartsWith("-.")?"-0"+s[1..]:s; }
 }
