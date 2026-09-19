@@ -25,8 +25,9 @@ public sealed class CarouselPlanner
         int planes=available>=12 && rng.NextDouble()<.55 ? Math.Min(available,new[]{8,12,16,20,24,30,40,60}[rng.Next(8)])
           : available>=8 ? Math.Min(available,new[]{8,12,16}[rng.Next(3)])
           : available>=4 ? 4 : available>=3 ? 3 : 2;
-        var gs=Enum.GetValues<CarouselGeometry>().Where(x=>!recentGeometry.Contains(x)).ToArray();
-        if(gs.Length==0) gs=Enum.GetValues<CarouselGeometry>();
+        var compatibleGeometry = new[]{CarouselGeometry.Wall,CarouselGeometry.FilmStrip,CarouselGeometry.Heart,CarouselGeometry.DiagonalSafe,CarouselGeometry.Asymmetric,CarouselGeometry.MovingContactSheet};
+        var gs=compatibleGeometry.Where(x=>!recentGeometry.Contains(x)).ToArray();
+        if(gs.Length==0) gs=compatibleGeometry;
         var ms=ImplementedMotions.Where(x=>!recentMotion.Contains(x)).ToArray();
         if(ms.Length==0) ms=ImplementedMotions;
         var g=gs[rng.Next(gs.Length)]; var m=ms[rng.Next(ms.Length)];
