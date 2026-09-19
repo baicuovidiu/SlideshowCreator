@@ -292,3 +292,28 @@ Obligatoriu:
 Rotația poate aparține planului, grupului sau canvas-ului virtual. Trebuie să existe limite estetice configurabile: rotații mici/elegante pentru fotografiile individuale și rotații mai ample numai pentru mișcarea ansamblului. Motorul automat variază sensul, unghiul, viteza, stagger-ul, distanța și numărul de imagini și evită repetarea apropiată.
 
 Toate aceste familii respectă regula FOTO COMPLETĂ / CONTAIN / FĂRĂ CROP AUTOMAT DISTRUCTIV.
+
+
+## 23. CARUSEL Engine 2 — bibliotecă creativă amplă, nu efecte adăugate unul câte unul
+Motorul trebuie proiectat din start ca generator de coregrafii parametrice și combinabile. Nu se limitează la lista de exemple; exemplele definesc familii care pot fi recombinate în zeci/sute de variații controlate.
+
+Familii obligatorii suplimentare:
+- SPIN BURST: multe fotografii complete apar simultan din direcții și unghiuri diferite, cu rotații controlate, ocupă progresiv ecranul, apoi se separă/explodează spre margini și reapar într-o geometrie nouă.
+- EXPLODE / REASSEMBLE: un ansamblu dens se desface radial, diagonal sau pe axe; fotografiile rămân obiecte complete, apoi revin în grilă, wall, benzi, arc, spirală ori Full Frame.
+- SURPRISE ANGLES: intrări din colțuri, muchii, diagonale, arce și puncte intermediare ale cadrului; ordinea și unghiurile sunt variate cu memorie anti-repetiție.
+- PHOTO HEART: inimă mare construită din multe fotografii complete; ansamblul pulsează ritmic prin poziție/scalarea planurilor sau a canvas-ului, fără crop distructiv al fotografiilor. Poate trece Heart → dispersie → Full Frame → Heart/WALL.
+- SHAPE MOSAICS: arhitectura trebuie să permită ulterior și alte forme/traiectorii definite procedural, nu doar inimă.
+- SPEED TRAIN: secvență foarte scurtă, energică, în care fotografiile circulă ca vagoanele unui tren/șir rapid prin cadru; accelerație, trecere, decelerație și revenire rapidă la fotografie/Full Frame. Nu trebuie să devină un efect lung sau obositor.
+- BURST TO WALL: imagini vin rapid din toate zonele, umplu ecranul cu cât mai multe fotografii lizibile, apoi ansamblul se transformă în wall dinamic.
+- WALL SHATTER: wall-ul se fragmentează în grupuri care pleacă în direcții diferite și se reasamblează în configurații noi.
+- KALEIDOSCOPE LAYOUT FLOW: simetrie și mișcare geometrică a planurilor fără deformarea sau decuparea fotografiilor-sursă.
+- TUNNEL / DEPTH PARADE: șiruri de fotografii complete traversează un spațiu virtual cu variație de scară/poziție; fără blur obligatoriu și fără sacrificarea clarității.
+- CORNER SWARM: grupuri pornesc din mai multe colțuri și converg într-o compoziție, apoi se redistribuie.
+- CENTER BLOOM: o fotografie/grup central se deschide în multe fotografii ca o floare, apoi acestea circulă independent.
+- FAN CASCADE, SPIRAL BURST, DIAGONAL RAIN, ROTATING GRID, MOVING CONTACT SHEET, RIBBON STREAM, DOUBLE/TRIPLE FILM STRIP și MULTI-AXIS PARADE.
+
+Regulă creativă: motorul automat alternează momente calme cu izbucniri scurte și spectaculoase. Efectele dense (Spin Burst, Explode, Heart, Speed Train, Wall Shatter etc.) sunt accente, nu rulează permanent. Între ele se revine la 1–4 fotografii și Full Frame pentru respirație vizuală.
+
+Regulă de varietate: geometria, numărul de imagini, direcțiile, rotația, viteza, stagger-ul, ordinea, Z-order-ul, traseele și familia de mișcare sunt parametri recombinabili. Sistemul păstrează istoric recent și evită repetarea perceptibilă.
+
+Regulă fundamentală: fotografia originală rămâne completă și proporțională. Nicio familie spectaculoasă nu justifică crop automat distructiv, deformare sau ascunderea inutilă/prelungită a unei fotografii.
