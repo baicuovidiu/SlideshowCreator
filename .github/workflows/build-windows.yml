@@ -3,7 +3,7 @@ name: Build Windows Installer 0.1.11
 on:
   workflow_dispatch:
   push:
-    branches: [ mvp-0.1.11 ]
+    branches: [ mvp-0.1.11-export-engine ]
 
 permissions:
   contents: read
