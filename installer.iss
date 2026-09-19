@@ -1,5 +1,5 @@
 #define AppName "Slideshow Creator"
-#define AppVersion "0.1.10"
+#define AppVersion "0.1.11"
 #define AppExeName "SlideshowCreator.exe"
 
 [Setup]
@@ -10,7 +10,7 @@ AppPublisher=Stefan Ovidiu
 DefaultDirName={localappdata}\Programs\Slideshow Creator
 DefaultGroupName={#AppName}
 OutputDir=OUTPUT
-OutputBaseFilename=SlideshowCreator-Setup-0.1.10
+OutputBaseFilename=SlideshowCreator-Setup-0.1.11
 Compression=lzma2/ultra64
 SolidCompression=yes
 ArchitecturesAllowed=x64compatible
