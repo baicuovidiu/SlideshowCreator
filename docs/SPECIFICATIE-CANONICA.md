@@ -249,3 +249,30 @@ REGULĂ DE VARIETATE: un montaj lung nu trebuie să pară aceeași schemă repet
 REGULĂ DE CALITATE: toate variațiile păstrează fotografia completă prin contain; nici creativitatea, nici geometria nu justifică crop automat distructiv.
 
 Această secțiune este obligatorie pentru 0.1.11+ și are prioritate față de implementarea veche bazată pe câteva preseturi fixe.
+
+
+## 22. CARUSEL de ansamblu / WALL — multe fotografii simultan
+Motorul trebuie să poată trece temporar de la CARUSEL-ul de 2–4 planuri la compoziții de ansamblu cu multe fotografii simultan. Pentru un proiect de 120 de fotografii poate exista, la momente alese automat sau manual, o secvență în care zeci sau chiar toate cele 120 apar împreună în același canvas.
+
+Nu este un colaj static. Fiecare fotografie rămâne obiect independent și poate intra, ieși, aluneca sau schimba poziția. Camera/canvas-ul poate parcurge ansamblul fără zoom automat aplicat fotografiei individuale.
+
+Familii obligatorii de variații:
+- PHOTO WALL: grilă dinamică cu multe fotografii complete;
+- FILM STRIP / BANDĂ: rânduri care se deplasează în sensuri opuse;
+- CONVEYOR: fotografii care traversează canvas-ul în flux;
+- MOSAIC FLOW: mozaic cu dimensiuni diferite care se rearanjează;
+- PARADE: succesiuni de fotografii care intră din margini și circulă;
+- RIVER: 2–4 fluxuri independente de imagini;
+- ORBIT / RING: grupuri dispuse pe traseu circular/eliptic fără deformarea surselor;
+- CASCADE: apariții succesive care construiesc un perete și apoi îl desfac;
+- WALL → FOCUS: multe imagini coexistă, apoi una este favorizată și devine Full Frame;
+- FOCUS → WALL: Full Frame se retrage într-un ansamblu mare;
+- WAVE: rânduri/coloane se deplasează cu faze diferite;
+- SHUFFLE: repoziționare controlată a mai multor planuri;
+- CROSS TRAFFIC: grupuri care circulă pe axe diferite fără obturare permanentă.
+
+Pentru proiecte mari, motorul poate folosi 6, 8, 12, 16, 20, 24, 30+ sau toate fotografiile disponibile într-o secvență de ansamblu. Numărul se alege în funcție de lizibilitate, durată și rezoluția finală.
+
+REGULĂ: „toate una lângă alta” nu înseamnă că toate trebuie să fie simultan suficient de mari pentru examinare individuală. Secvența poate plimba viewport-ul/canvas-ul printr-un wall mai mare decât cadrul 1920×1080, astfel încât fotografiile să devină lizibile pe parcurs. Fotografiile individuale rămân complete (contain), fără crop distructiv.
+
+CARUSEL Automat trebuie să combine aceste familii cu motorul 2–4 planuri și Full Frame, generând zeci de combinații, cu memorie anti-repetiție pentru familie, geometrie, direcție, ritm și ordine. Un montaj lung trebuie să evolueze vizual, nu să repete trei formule.
