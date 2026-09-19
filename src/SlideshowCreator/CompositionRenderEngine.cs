@@ -35,6 +35,8 @@ public static class CompositionRenderEngine
                 $"{a};{b};{bg};[bg][a]overlay=x='if(lt(t,{e}),-1180+(1300)*t/{e},120)':y=70:shortest=1[t1];[t1][b]overlay=x='if(lt(t,{de}),1920,if(lt(t,{F(delay+enter)}),1920-(1300)*(t-{de})/{e},620))':y=230:shortest=1,trim=duration={dur},setpts=PTS-STARTPTS[outv]",
             "Diagonal \\ Opus" =>
                 $"{a};{b};{bg};[bg][a]overlay=x='if(lt(t,{e}),1920-(1300)*t/{e},620)':y=70:shortest=1[t1];[t1][b]overlay=x='if(lt(t,{de}),-1180,if(lt(t,{F(delay+enter)}),-1180+(1300)*(t-{de})/{e},120))':y=230:shortest=1,trim=duration={dur},setpts=PTS-STARTPTS[outv]",
+            "2 Orizontale Fluide" =>
+                $"{top};{bot};{bg};[bg][top]overlay=x='if(lt(t,{e}),-1720+(1820)*t/{e},if(lt(t,{F(d-enter)}),100,100+(1820)*(t-{F(d-enter)})/{e}))':y=55:shortest=1[t1];[t1][bot]overlay=x='if(lt(t,{de}),1920,if(lt(t,{F(delay+enter)}),1920-(1820)*(t-{de})/{e},if(lt(t,{F(d-enter)}),100,100-(1820)*(t-{F(d-enter)})/{e})))':y=555:shortest=1,trim=duration={dur},setpts=PTS-STARTPTS[outv]",
             _ => $"[0:v][1:v]xfade=transition=fade:duration=.65:offset={F(Math.Max(.7,d-.65))},format=yuv420p[outv]"
         };
     }
