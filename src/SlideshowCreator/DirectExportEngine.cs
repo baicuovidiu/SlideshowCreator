@@ -100,7 +100,7 @@ public static class DirectExportEngine
             if(string.IsNullOrWhiteSpace(music))
                 ffmpeg($"-y -i \"{visual}\" -vf \"fade=t=in:st=0:d={F(intro)},fade=t=out:st={F(outStart)}:d={F(outro)}\" -an -c:v {encoder} -preset {preset} -pix_fmt yuv420p -movflags +faststart \"{destination}\"");
             else
-                ffmpeg($"-y -i \"{visual}\" -stream_loop -1 -i \"{music}\" -vf \"fade=t=in:st=0:d={F(intro)},fade=t=out:st={F(outStart)}:d={F(outro)}\" -filter:a \"afade=t=in:st=0:d={F(intro)},afade=t=out:st={F(outStart)}:d={F(outro)}\" -map 0:v -map 1:a -c:v {encoder} -preset {preset} -pix_fmt yuv420p -c:a aac -b:a 256k -t {F(total)} -movflags +faststart \"{destination}\"");
+                ffmpeg($"-y -i \"{visual}\" -stream_loop -1 -i \"{music}\" -vf \"fade=t=in:st=0:d={F(intro)},fade=t=out:st={F(outStart)}:d={F(outro)}\" -filter:a \"afade=t=in:st=0:d={F(intro)},afade=t=out:st={F(outStart)}:d={F(outro)}\" -map 0:v -map 1:a -c:v {encoder} -preset {preset} -pix_fmt yuv420p -c:a aac -b:a 256k -t {F(total)} -shortest -movflags +faststart \"{destination}\"");
             progress?.Invoke(100,"Export 0.1.11 finalizat");
         }
         finally { try{Directory.Delete(dir,true);}catch{} }
