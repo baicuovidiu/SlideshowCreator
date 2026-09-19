@@ -43,6 +43,7 @@ public static class DirectExportEngine
                         var graph=recipe.Motion switch
                         {
                             CarouselMotion.SpeedTrain => CompositionRenderEngine.BuildSpeedTrain(inputs,dur,recipe.Reverse),
+                            CarouselMotion.HeartPulse => CompositionRenderEngine.BuildPhotoHeart(inputs,dur),
                             CarouselMotion.SpinBurst or CarouselMotion.ExplodeReassemble or CarouselMotion.WallShatter => CompositionRenderEngine.BuildSpinBurst(inputs,dur,recipe.Reverse),
                             _ => CompositionRenderEngine.BuildWall(inputs,dur,recipe.Motion==CarouselMotion.HeartPulse)
                         };
