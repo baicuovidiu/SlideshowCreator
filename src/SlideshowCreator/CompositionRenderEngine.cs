@@ -152,6 +152,27 @@ public static class CompositionRenderEngine
     }
 
 
+
+    // Engine 2: uncropped diagonal slide parade, suitable for short energetic accents.
+    public static string BuildDiagonalParade(IReadOnlyList<MediaItem> items,double duration,bool reverse=false)
+    {
+        int n=Math.Min(items.Count,16); double d=Math.Max(4.0,duration); int w=430,h=300;
+        var parts=new List<string>(); string dur=F(d);
+        for(int i=0;i<n;i++) parts.Add($"[{i}:v]scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black@0,format=rgba[p{i}]");
+        parts.Add($"color=c=black:s=1920x1080:r=30:d={dur}[d0]"); string last="d0";
+        for(int i=0;i<n;i++)
+        {
+            double st=i*.09, travel=Math.Max(2.2,d-.4); int lane=i%4;
+            string x=reverse?$"-{w}+({1920+w})*(t-{F(st)})/{F(travel)}":$"1920-({1920+w})*(t-{F(st)})/{F(travel)}";
+            string y=reverse?$"{80+lane*210}+520*(t-{F(st)})/{F(travel)}":$"{600-lane*150}-420*(t-{F(st)})/{F(travel)}";
+            string next=$"d{i+1}";
+            parts.Add($"[{last}][p{i}]overlay=x='if(lt(t,{F(st)}),-3000,{x})':y='{y}':shortest=1[{next}]"); last=next;
+        }
+        parts.Add($"[{last}]trim=duration={dur},setpts=PTS-STARTPTS[outv]");
+        return string.Join(";",parts);
+    }
+
+
     // Four COMPLETE independent planes enter one-by-one. Near the end, three leave
     // independently and the selected survivor (input 0) grows into a complete
     // Full Frame. No source is cropped at any point.
