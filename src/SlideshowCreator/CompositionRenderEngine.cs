@@ -24,9 +24,30 @@ public static class CompositionRenderEngine
             "2 Orizontal Paralel" => $"{top};{bot};{bg};[bg][top]overlay=x='if(lt(t,{e}),-1720+(1820)*t/{e},100)':y=55:shortest=1[t1];[t1][bot]overlay=x='if(lt(t,{de}),-1720,if(lt(t,{F(delay+enter)}),-1720+(1820)*(t-{de})/{e},100))':y=555:shortest=1,trim=duration={dur},setpts=PTS-STARTPTS[outv]",
             "Diagonal / Opus" => $"{a};{b};{bg};[bg][a]overlay=x='if(lt(t,{e}),-1180+(1300)*t/{e},120)':y=70:shortest=1[t1];[t1][b]overlay=x='if(lt(t,{de}),1920,if(lt(t,{F(delay+enter)}),1920-(1300)*(t-{de})/{e},620))':y=230:shortest=1,trim=duration={dur},setpts=PTS-STARTPTS[outv]",
             "Diagonal \\ Opus" => $"{a};{b};{bg};[bg][a]overlay=x='if(lt(t,{e}),1920-(1300)*t/{e},620)':y=70:shortest=1[t1];[t1][b]overlay=x='if(lt(t,{de}),-1180,if(lt(t,{F(delay+enter)}),-1180+(1300)*(t-{de})/{e},120))':y=230:shortest=1,trim=duration={dur},setpts=PTS-STARTPTS[outv]",
+            "2 Orizontale Alternante" => BuildAlternatingTwo(d),
             "2 Orizontale Fluide" => $"{top};{bot};{bg};[bg][top]overlay=x='if(lt(t,{e}),-1720+(1820)*t/{e},if(lt(t,{F(d-enter)}),100,100+(1820)*(t-{F(d-enter)})/{e}))':y=55:shortest=1[t1];[t1][bot]overlay=x='if(lt(t,{de}),1920,if(lt(t,{F(delay+enter)}),1920-(1820)*(t-{de})/{e},if(lt(t,{F(d-enter)}),100,100-(1820)*(t-{F(d-enter)})/{e})))':y=555:shortest=1,trim=duration={dur},setpts=PTS-STARTPTS[outv]",
             _ => $"[0:v][1:v]xfade=transition=fade:duration=.65:offset={F(Math.Max(.7,d-.65))},format=yuv420p[outv]"
         };
+    }
+
+    // Two complete horizontal planes meet from opposite sides, then alternate
+    // visual priority for about two seconds. No crop; each plane remains independent.
+    static string BuildAlternatingTwo(double d)
+    {
+        d=Math.Max(4.4,d); double en=.65, meet=.85;
+        double a1=meet+.45, a2=a1+.58, a3=a2+.47, a4=a3+.62;
+        double exit=Math.Max(a4+.45,d-.65);
+        var dur=F(d);
+        var top="[0:v]scale=1720:470:force_original_aspect_ratio=decrease,pad=1720:470:(ow-iw)/2:(oh-ih)/2:color=black@0,format=rgba[top]";
+        var bot="[1:v]scale=1720:470:force_original_aspect_ratio=decrease,pad=1720:470:(ow-iw)/2:(oh-ih)/2:color=black@0,format=rgba[bot]";
+        var bg=$"color=c=black:s=1920x1080:r=30:d={dur}[bg]";
+        // Alternation is created by small opposing vertical shifts: each image gets
+        // a clean, readable turn rather than remaining permanently eclipsed.
+        var yTop=$"55+if(between(t,{F(a1)},{F(a2)}),70,if(between(t,{F(a3)},{F(a4)}),70,0))";
+        var yBot=$"555-if(between(t,{F(a2)},{F(a3)}),70,if(between(t,{F(a4)},{F(exit)}),70,0))";
+        return $"{top};{bot};{bg};"+
+          $"[bg][top]overlay=x='if(lt(t,{F(en)}),-1720+1820*t/{F(en)},if(lt(t,{F(exit)}),100,100+1820*(t-{F(exit)})/{F(en)}))':y='{yTop}':shortest=1[t1];"+
+          $"[t1][bot]overlay=x='if(lt(t,.18),1920,if(lt(t,{F(en+.18)}),1920-1820*(t-.18)/{F(en)},if(lt(t,{F(exit)}),100,100-1820*(t-{F(exit)})/{F(en)})))':y='{yBot}':shortest=1,trim=duration={dur},setpts=PTS-STARTPTS[outv]";
     }
 
     // Four COMPLETE independent planes enter one-by-one. Near the end, three leave
@@ -50,5 +71,24 @@ public static class CompositionRenderEngine
           $"[b][p2]overlay=x='if(lt(t,{t2}),-820,if(lt(t,{F(stagger*2+enter)}),-820+900*(t-{t2})/{en},if(lt(t,{ls}),80,80-900*(t-{ls})/{le})))':y=585:shortest=1[c];"+
           $"[c][p3]overlay=x='if(lt(t,{t3}),1920,if(lt(t,{F(stagger*3+enter)}),1920-900*(t-{t3})/{en},if(lt(t,{ls}),1020,1020+900*(t-{ls})/{le})))':y=585:shortest=1[d];"+
           $"[d][full]overlay=x=0:y=0:enable='gte(t,{gs})':alpha='straight':shortest=1,trim=duration={dur},setpts=PTS-STARTPTS[outv]";
+    }
+
+    // Four independent complete images assemble, then the composition breaks to
+    // two favored planes and finally one survivor. The survivor is revealed Full Frame.
+    public static string BuildFourToTwoToOne(double duration)
+    {
+        var d=Math.Max(5.4,duration); var en=.55; var st=.16;
+        var breakAt=Math.Max(2.15,d*.48); var twoAt=breakAt+.65; var oneAt=Math.Max(twoAt+.85,d-1.05);
+        var dur=F(d);
+        string P(int i,string l)=>$"[{i}:v]scale=820:390:force_original_aspect_ratio=decrease,pad=820:390:(ow-iw)/2:(oh-ih)/2:color=black@0,format=rgba[{l}]";
+        var full="[0:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,format=rgba[full]";
+        var bg=$"color=c=black:s=1920x1080:r=30:d={dur}[bg]";
+        return $"{P(0,"p0")};{P(1,"p1")};{P(2,"p2")};{P(3,"p3")};{full};{bg};"+
+          $"[bg][p0]overlay=x='if(lt(t,{F(en)}),-820+900*t/{F(en)},80)':y=105:shortest=1[a];"+
+          $"[a][p1]overlay=x='if(lt(t,{F(st)}),1920,if(lt(t,{F(st+en)}),1920-900*(t-{F(st)})/{F(en)},1020))':y=105:shortest=1[b];"+
+          $"[b][p2]overlay=x='if(lt(t,{F(st*2)}),-820,if(lt(t,{F(st*2+en)}),-820+900*(t-{F(st*2)})/{F(en)},if(lt(t,{F(breakAt)}),80,80-900*(t-{F(breakAt)})/.65)))':y=585:shortest=1[c];"+
+          $"[c][p3]overlay=x='if(lt(t,{F(st*3)}),1920,if(lt(t,{F(st*3+en)}),1920-900*(t-{F(st*3)})/{F(en)},if(lt(t,{F(breakAt)}),1020,1020+900*(t-{F(breakAt)})/.65)))':y=585:shortest=1[d];"+
+          $"[d][p1]overlay=x='if(lt(t,{F(oneAt)}),1020,1020+900*(t-{F(oneAt)})/.55)':y=345:enable='gte(t,{F(twoAt)})':shortest=1[e];"+
+          $"[e][full]overlay=x=0:y=0:enable='gte(t,{F(oneAt+.45)})':shortest=1,trim=duration={dur},setpts=PTS-STARTPTS[outv]";
     }
 }
