@@ -43,7 +43,7 @@ public static class CompositionRenderEngine
         var p0=P(0,"p0"); var p1=P(1,"p1"); var p2=P(2,"p2"); var p3=P(3,"p3");
         var full="[0:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,format=rgba[full]";
         var bg=$"color=c=black:s=1920x1080:r=30:d={dur}[bg]";
-        var t1=F(stagger),t2=F(stagger*2),t3=F(stagger*3),en=F(enter),ls=F(leaveStart),le=F(leave),gs=F(growStart),gr=F(grow);
+        string t1=F(stagger),t2=F(stagger*2),t3=F(stagger*3),en=F(enter),ls=F(leaveStart),le=F(leave),gs=F(growStart),gr=F(grow);
         return $"{p0};{p1};{p2};{p3};{full};{bg};"+
           $"[bg][p0]overlay=x='if(lt(t,{en}),-820+900*t/{en},80)':y=105:shortest=1[a];"+
           $"[a][p1]overlay=x='if(lt(t,{t1}),1920,if(lt(t,{F(stagger+enter)}),1920-900*(t-{t1})/{en},1020))':y=105:shortest=1[b];"+
