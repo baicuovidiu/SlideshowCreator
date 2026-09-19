@@ -44,6 +44,7 @@ public static class DirectExportEngine
                         {
                             CarouselMotion.SpeedTrain => CompositionRenderEngine.BuildSpeedTrain(inputs,dur,recipe.Reverse),
                             CarouselMotion.HeartPulse => CompositionRenderEngine.BuildPhotoHeart(inputs,dur),
+                            CarouselMotion.DiagonalParade or CarouselMotion.DiagonalRain or CarouselMotion.MultiAxisParade => CompositionRenderEngine.BuildDiagonalParade(inputs,dur,recipe.Reverse),
                             CarouselMotion.SpinBurst or CarouselMotion.ExplodeReassemble or CarouselMotion.WallShatter => CompositionRenderEngine.BuildSpinBurst(inputs,dur,recipe.Reverse),
                             _ => CompositionRenderEngine.BuildWall(inputs,dur,recipe.Motion==CarouselMotion.HeartPulse)
                         };
