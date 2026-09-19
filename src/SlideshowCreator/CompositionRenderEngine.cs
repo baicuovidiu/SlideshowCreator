@@ -124,6 +124,34 @@ public static class CompositionRenderEngine
     }
 
 
+
+    // Engine 2: true heart made from independent complete photos.
+    public static string BuildPhotoHeart(IReadOnlyList<MediaItem> items,double duration)
+    {
+        int n=Math.Min(items.Count,36); double d=Math.Max(5.2,duration);
+        int cell=150; var parts=new List<string>(); string dur=F(d);
+        for(int i=0;i<n;i++) parts.Add($"[{i}:v]scale={cell}:{cell}:force_original_aspect_ratio=decrease,pad={cell}:{cell}:(ow-iw)/2:(oh-ih)/2:color=black@0,format=rgba[p{i}]");
+        parts.Add($"color=c=black:s=1920x1080:r=30:d={dur}[h0]"); string last="h0";
+        for(int i=0;i<n;i++)
+        {
+            double a=2*Math.PI*i/n;
+            // Parametric heart, normalized into a safe 1920x1080 area.
+            double hx=16*Math.Pow(Math.Sin(a),3);
+            double hy=13*Math.Cos(a)-5*Math.Cos(2*a)-2*Math.Cos(3*a)-Math.Cos(4*a);
+            int x=(int)Math.Round(960+hx*43-cell/2.0);
+            int y=(int)Math.Round(535-hy*31-cell/2.0);
+            double st=(i%9)*.055, en=.62;
+            string px=$"if(lt(t,{F(st)}),960,if(lt(t,{F(st+en)}),960+({x}-960)*(t-{F(st)})/{F(en)},{x}+10*sin(2*PI*t*1.15)))";
+            string py=$"if(lt(t,{F(st)}),540,if(lt(t,{F(st+en)}),540+({y}-540)*(t-{F(st)})/{F(en)},{y}+7*sin(2*PI*t*1.15)))";
+            string next=$"h{i+1}";
+            parts.Add($"[{last}][p{i}]overlay=x='{px}':y='{py}':shortest=1[{next}]"); last=next;
+        }
+        // Gentle ensemble pulse; individual photos stay uncropped.
+        parts.Add($"[{last}]scale=w='1920*(1+0.022*sin(2*PI*t*1.15))':h='1080*(1+0.022*sin(2*PI*t*1.15))':eval=frame,crop=1920:1080,trim=duration={dur},setpts=PTS-STARTPTS[outv]");
+        return string.Join(";",parts);
+    }
+
+
     // Four COMPLETE independent planes enter one-by-one. Near the end, three leave
     // independently and the selected survivor (input 0) grows into a complete
     // Full Frame. No source is cropped at any point.
