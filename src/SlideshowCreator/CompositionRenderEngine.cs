@@ -50,6 +50,36 @@ public static class CompositionRenderEngine
           $"[t1][bot]overlay=x='if(lt(t,.18),1920,if(lt(t,{F(en+.18)}),1920-1820*(t-.18)/{F(en)},if(lt(t,{F(exit)}),100,100-1820*(t-{F(exit)})/{F(en)})))':y='{yBot}':shortest=1,trim=duration={dur},setpts=PTS-STARTPTS[outv]";
     }
 
+
+    // Engine 2: dense uncropped photo wall with animated entrance and optional pulse.
+    public static string BuildWall(IReadOnlyList<MediaItem> items,double duration,bool pulse=false)
+    {
+        int n=Math.Min(items.Count,60); if(n<2) return BuildTwoPlan("2 Orizontal Opus",duration);
+        double d=Math.Max(4.5,duration); int cols=(int)Math.Ceiling(Math.Sqrt(n*16.0/9.0));
+        int rows=(int)Math.Ceiling(n/(double)cols); int gap=12;
+        int cw=Math.Max(120,(1920-gap*(cols+1))/cols), ch=Math.Max(90,(1080-gap*(rows+1))/rows);
+        var parts=new List<string>(); var dur=F(d);
+        for(int i=0;i<n;i++) parts.Add($"[{i}:v]scale={cw}:{ch}:force_original_aspect_ratio=decrease,pad={cw}:{ch}:(ow-iw)/2:(oh-ih)/2:color=black@0,format=rgba[p{i}]");
+        parts.Add($"color=c=black:s=1920x1080:r=30:d={dur}[w0]");
+        string last="w0";
+        for(int i=0;i<n;i++)
+        {
+            int col=i%cols,row=i/cols,x=gap+col*(cw+gap),y=gap+row*(ch+gap);
+            double st=.045*i, en=.42; string next=$"w{i+1}";
+            string sx=i%4 switch {0=>$"-{cw}+({x+cw})*(t-{F(st)})/{F(en)}",1=>$"1920-({1920-x})*(t-{F(st)})/{F(en)}",2=>$"{x}",_=>$"{x}"};
+            string sy=i%4 switch {2=>$"-{ch}+({y+ch})*(t-{F(st)})/{F(en)}",3=>$"1080-({1080-y})*(t-{F(st)})/{F(en)}",_=>$"{y}"};
+            parts.Add($"[{last}][p{i}]overlay=x='if(lt(t,{F(st)}),-3000,if(lt(t,{F(st+en)}),{sx},{x}))':y='if(lt(t,{F(st)}),-3000,if(lt(t,{F(st+en)}),{sy},{y}))':shortest=1[{next}]");
+            last=next;
+        }
+        if(pulse)
+        {
+            parts.Add($"[{last}]scale=w='1920*(1+0.018*sin(2*PI*t*1.25))':h='1080*(1+0.018*sin(2*PI*t*1.25))':eval=frame,crop=1920:1080,trim=duration={dur},setpts=PTS-STARTPTS[outv]");
+        }
+        else parts.Add($"[{last}]trim=duration={dur},setpts=PTS-STARTPTS[outv]");
+        return string.Join(";",parts);
+    }
+
+
     // Four COMPLETE independent planes enter one-by-one. Near the end, three leave
     // independently and the selected survivor (input 0) grows into a complete
     // Full Frame. No source is cropped at any point.
