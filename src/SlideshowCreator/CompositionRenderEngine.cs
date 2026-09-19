@@ -80,6 +80,50 @@ public static class CompositionRenderEngine
     }
 
 
+
+    // Engine 2: fast horizontal photo train. Complete photos travel as independent cars.
+    public static string BuildSpeedTrain(IReadOnlyList<MediaItem> items,double duration,bool reverse=false)
+    {
+        int n=Math.Min(items.Count,24); double d=Math.Max(2.8,Math.Min(6.0,duration));
+        int carW=520,carH=760,gap=26; var parts=new List<string>(); string dur=F(d);
+        for(int i=0;i<n;i++) parts.Add($"[{i}:v]scale={carW}:{carH}:force_original_aspect_ratio=decrease,pad={carW}:{carH}:(ow-iw)/2:(oh-ih)/2:color=black@0,format=rgba[p{i}]");
+        parts.Add($"color=c=black:s=1920x1080:r=30:d={dur}[t0]");
+        string last="t0"; double travel=d*.82;
+        for(int i=0;i<n;i++)
+        {
+            double st=i*.075; string next=$"t{i+1}"; int laneY=160+(i%2)*40;
+            string x=reverse
+              ? $"if(lt(t,{F(st)}),-3000,-{carW}+({1920+carW+gap*n})*(t-{F(st)})/{F(travel)})"
+              : $"if(lt(t,{F(st)}),3000,1920-({1920+carW+gap*n})*(t-{F(st)})/{F(travel)})";
+            parts.Add($"[{last}][p{i}]overlay=x='{x}':y={laneY}:shortest=1[{next}]"); last=next;
+        }
+        parts.Add($"[{last}]trim=duration={dur},setpts=PTS-STARTPTS[outv]");
+        return string.Join(";",parts);
+    }
+
+    // Engine 2: burst from centre, readable hold, then radial/diagonal dispersal.
+    public static string BuildSpinBurst(IReadOnlyList<MediaItem> items,double duration,bool reverse=false)
+    {
+        int n=Math.Min(items.Count,20); double d=Math.Max(4.8,duration), enter=.75, hold=Math.Max(1.2,d*.38), exit=.85;
+        int cols=(int)Math.Ceiling(Math.Sqrt(n*16.0/9.0)), rows=(int)Math.Ceiling(n/(double)cols), gap=10;
+        int cw=Math.Max(150,(1920-gap*(cols+1))/cols), ch=Math.Max(110,(1080-gap*(rows+1))/rows);
+        var parts=new List<string>(); string dur=F(d);
+        for(int i=0;i<n;i++) parts.Add($"[{i}:v]scale={cw}:{ch}:force_original_aspect_ratio=decrease,pad={cw}:{ch}:(ow-iw)/2:(oh-ih)/2:color=black@0,format=rgba[p{i}]");
+        parts.Add($"color=c=black:s=1920x1080:r=30:d={dur}[s0]"); string last="s0";
+        for(int i=0;i<n;i++)
+        {
+            int col=i%cols,row=i/cols,tx=gap+col*(cw+gap),ty=gap+row*(ch+gap);
+            double st=(i%7)*.055, outAt=Math.Max(st+enter+hold,d-exit);
+            int dx=((i%3)-1)*1500,dy=(((i/3)%3)-1)*1000;
+            string x=$"if(lt(t,{F(st)}),960,if(lt(t,{F(st+enter)}),960+({tx}-960)*(t-{F(st)})/{F(enter)},if(lt(t,{F(outAt)}),{tx},{tx}+({dx})*(t-{F(outAt)})/{F(exit)})))";
+            string y=$"if(lt(t,{F(st)}),540,if(lt(t,{F(st+enter)}),540+({ty}-540)*(t-{F(st)})/{F(enter)},if(lt(t,{F(outAt)}),{ty},{ty}+({dy})*(t-{F(outAt)})/{F(exit)})))";
+            string next=$"s{i+1}"; parts.Add($"[{last}][p{i}]overlay=x='{x}':y='{y}':shortest=1[{next}]"); last=next;
+        }
+        parts.Add($"[{last}]trim=duration={dur},setpts=PTS-STARTPTS[outv]");
+        return string.Join(";",parts);
+    }
+
+
     // Four COMPLETE independent planes enter one-by-one. Near the end, three leave
     // independently and the selected survivor (input 0) grows into a complete
     // Full Frame. No source is cropped at any point.
