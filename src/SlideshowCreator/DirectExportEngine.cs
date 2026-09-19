@@ -24,9 +24,30 @@ public static class DirectExportEngine
             progress?.Invoke(2,"0.1.11 • Motor direct: analizez timeline-ul...");
             var sequence=new List<MediaItem>();
             int carouselCount=0;
+            var planner=new CarouselPlanner();
             for(int i=0;i<source.Count;i++)
             {
                 var m=source[i];
+
+                // Engine 2 automatic dense accent: periodically replace a plain automatic
+                // section with a many-photo animated WALL. Sources remain complete/uncropped.
+                if(m.Composition=="CARUSEL AUTOMAT" && source.Count-i>=8 && (i==0 || i%24==0))
+                {
+                    var recipe=planner.Next(source.Count-i);
+                    int take=Math.Min(source.Count-i,Math.Max(8,recipe.Planes));
+                    if(take>=8)
+                    {
+                        var inputs=source.Skip(i).Take(take).ToArray();
+                        var dur=Math.Max(5.0,Math.Min(9.0,4.5+take*.06));
+                        var outp=Path.Combine(dir,$"engine2_{carouselCount++:000}.mp4");
+                        var graph=CompositionRenderEngine.BuildWall(inputs,dur,recipe.Motion==CarouselMotion.HeartPulse);
+                        ffmpeg($"-y {Inputs(inputs)} -filter_complex \"{graph}\" -map \"[outv]\" -an -c:v {encoder} -preset {preset} -pix_fmt yuv420p \"{outp}\"");
+                        sequence.Add(CloneRendered(m,outp,dur));
+                        i+=take-1;
+                        progress?.Invoke(5+30.0*(i+1)/source.Count,$"CARUSEL Engine 2 • {recipe.Name}");
+                        continue;
+                    }
+                }
                 bool four=(m.Composition=="4 Cadrane → 1"||m.Composition=="4 → 2 → 1") && i+3<source.Count;
                 bool two=m.Composition!="Full Frame" && !four && i+1<source.Count;
                 if(four)
