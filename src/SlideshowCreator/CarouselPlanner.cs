@@ -11,15 +11,13 @@ public sealed class CarouselPlanner
     readonly Queue<CarouselGeometry> recentGeometry=new();
     readonly Queue<CarouselMotion> recentMotion=new();
 
-    // Only motions with a real renderer are eligible for Engine 2 automatic selection.
-    // This prevents a planned-but-not-yet-rendered family from silently falling back
-    // to WALL and making the automatic montage look repetitive.
+    // Engine 2 automatic selection exposes only families that have distinct renderers.
+    // Planned families stay in the enum/specification but cannot silently masquerade as WALL.
     static readonly CarouselMotion[] ImplementedMotions =
     {
         CarouselMotion.DiagonalParade, CarouselMotion.DiagonalRain, CarouselMotion.MultiAxisParade,
         CarouselMotion.SpinBurst, CarouselMotion.ExplodeReassemble, CarouselMotion.WallShatter,
-        CarouselMotion.HeartPulse, CarouselMotion.SpeedTrain,
-        CarouselMotion.Wave, CarouselMotion.Conveyor, CarouselMotion.RotationFlow
+        CarouselMotion.HeartPulse, CarouselMotion.SpeedTrain
     };
 
     public CarouselRecipe Next(int available)
