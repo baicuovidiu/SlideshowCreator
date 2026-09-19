@@ -66,8 +66,8 @@ public static class CompositionRenderEngine
         {
             int col=i%cols,row=i/cols,x=gap+col*(cw+gap),y=gap+row*(ch+gap);
             double st=.045*i, en=.42; string next=$"w{i+1}";
-            string sx=i%4 switch {0=>$"-{cw}+({x+cw})*(t-{F(st)})/{F(en)}",1=>$"1920-({1920-x})*(t-{F(st)})/{F(en)}",2=>$"{x}",_=>$"{x}"};
-            string sy=i%4 switch {2=>$"-{ch}+({y+ch})*(t-{F(st)})/{F(en)}",3=>$"1080-({1080-y})*(t-{F(st)})/{F(en)}",_=>$"{y}"};
+            string sx=(i%4) switch {0=>$"-{cw}+({x+cw})*(t-{F(st)})/{F(en)}",1=>$"1920-({1920-x})*(t-{F(st)})/{F(en)}",2=>$"{x}",_=>$"{x}"};
+            string sy=(i%4) switch {2=>$"-{ch}+({y+ch})*(t-{F(st)})/{F(en)}",3=>$"1080-({1080-y})*(t-{F(st)})/{F(en)}",_=>$"{y}"};
             parts.Add($"[{last}][p{i}]overlay=x='if(lt(t,{F(st)}),-3000,if(lt(t,{F(st+en)}),{sx},{x}))':y='if(lt(t,{F(st)}),-3000,if(lt(t,{F(st+en)}),{sy},{y}))':shortest=1[{next}]");
             last=next;
         }
