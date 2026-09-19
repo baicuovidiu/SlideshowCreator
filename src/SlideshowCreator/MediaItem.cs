@@ -12,6 +12,8 @@ public sealed class MediaItem : INotifyPropertyChanged
     public DateTime Date { get; set; }
     public double Duration { get; set; } = 4;
     public double TrimIn { get; set; }
+    public double SourceDuration { get; set; }
+    public double TrimOut => SourceDuration > 0 ? Math.Min(SourceDuration, TrimIn + Duration) : TrimIn + Duration;
     public bool Mute { get; set; }
 
     string transition = "Crossfade";
