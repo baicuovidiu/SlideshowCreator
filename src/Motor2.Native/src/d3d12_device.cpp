@@ -9,6 +9,7 @@
 #include <cstring>
 #include <unordered_map>
 #include <vector>
+#include <nvEncodeAPI.h>
 
 using Microsoft::WRL::ComPtr;
 
@@ -251,4 +252,20 @@ MOTOR2_API int motor2_d3d12_readback_rgba16f(void* context, void* target, void* 
     std::swap(b.Transition.StateBefore,b.Transition.StateAfter); l->ResourceBarrier(1,&b); if(FAILED(hr=l->Close())) return hr; ID3D12CommandList* lists[]={l.Get()}; ctx->directQueue->ExecuteCommandLists(1,lists); WaitForGpu(ctx);
     std::uint8_t* p=nullptr; D3D12_RANGE rr{static_cast<SIZE_T>(fp.Offset),static_cast<SIZE_T>(fp.Offset+total)}; if(FAILED(hr=rb->Map(0,&rr,reinterpret_cast<void**>(&p)))) return hr;
     auto* out=static_cast<std::uint8_t*>(destination); for(UINT y=0;y<rows;++y) std::memcpy(out+static_cast<size_t>(y)*rowBytes,p+fp.Offset+static_cast<size_t>(y)*fp.Footprint.RowPitch,static_cast<size_t>(rowBytes)); D3D12_RANGE wr{0,0}; rb->Unmap(0,&wr); return S_OK;
+}
+
+MOTOR2_API int motor2_nvenc_probe(Motor2NvencProbeInfo* info) {
+    if(!info) return E_POINTER;
+    info->apiVersion = NVENCAPI_VERSION;
+    info->maxSupportedVersion = 0;
+    HMODULE dll=LoadLibraryW(sizeof(void*)==8 ? L"nvEncodeAPI64.dll" : L"nvEncodeAPI.dll");
+    if(!dll) return HRESULT_FROM_WIN32(GetLastError());
+    using GetMaxFn = NVENCSTATUS (NVENCAPI*)(uint32_t*);
+    auto getMax=reinterpret_cast<GetMaxFn>(GetProcAddress(dll,"NvEncodeAPIGetMaxSupportedVersion"));
+    if(!getMax){FreeLibrary(dll);return E_NOINTERFACE;}
+    uint32_t maxVersion=0; const auto st=getMax(&maxVersion); FreeLibrary(dll);
+    if(st!=NV_ENC_SUCCESS) return E_FAIL;
+    info->maxSupportedVersion=maxVersion;
+    const uint32_t required=(NVENCAPI_MAJOR_VERSION<<4)|NVENCAPI_MINOR_VERSION;
+    return maxVersion>=required ? S_OK : HRESULT_FROM_WIN32(ERROR_OLD_WIN_VERSION);
 }
