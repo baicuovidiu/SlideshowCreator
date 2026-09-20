@@ -8,6 +8,7 @@
 #include <cwchar>
 #include <cstring>
 #include <unordered_map>
+#include <vector>
 
 using Microsoft::WRL::ComPtr;
 
@@ -30,6 +31,7 @@ struct NativeContext {
     ComPtr<ID3D12DescriptorHeap> srvHeap;
     UINT srvStride = 0;
     UINT nextSrv = 0;
+    std::vector<UINT> freeSrv;
     std::unordered_map<ID3D12Resource*, UINT> srvByResource;
     static constexpr UINT FrameCount = 3;
     ComPtr<ID3D12CommandAllocator> frameAllocators[FrameCount];
@@ -91,7 +93,14 @@ MOTOR2_API void* motor2_d3d12_create() {
 
 MOTOR2_API void motor2_d3d12_destroy(void* context) {
     auto* ctx = static_cast<NativeContext*>(context);
-    if (ctx && ctx->fenceEvent) CloseHandle(ctx->fenceEvent);
+    if (!ctx) return;
+    if (ctx->directQueue && ctx->fence) {
+        const UINT64 fv=++ctx->fenceValue;
+        if (SUCCEEDED(ctx->directQueue->Signal(ctx->fence.Get(),fv)) && ctx->fence->GetCompletedValue()<fv && ctx->fenceEvent) {
+            if (SUCCEEDED(ctx->fence->SetEventOnCompletion(fv,ctx->fenceEvent))) WaitForSingleObject(ctx->fenceEvent,INFINITE);
+        }
+    }
+    if (ctx->fenceEvent) CloseHandle(ctx->fenceEvent);
     delete ctx;
 }
 
@@ -102,12 +111,13 @@ MOTOR2_API void* motor2_d3d12_create_texture_rgba8(void* context, std::uint32_t 
     D3D12_HEAP_PROPERTIES heap{}; heap.Type = D3D12_HEAP_TYPE_DEFAULT;
     D3D12_RESOURCE_DESC d{}; d.Dimension=D3D12_RESOURCE_DIMENSION_TEXTURE2D; d.Width=width; d.Height=height; d.DepthOrArraySize=1; d.MipLevels=1; d.Format=DXGI_FORMAT_R8G8B8A8_UNORM; d.SampleDesc.Count=1; d.Layout=D3D12_TEXTURE_LAYOUT_UNKNOWN;
     if (FAILED(ctx->device->CreateCommittedResource(&heap,D3D12_HEAP_FLAG_NONE,&d,D3D12_RESOURCE_STATE_COPY_DEST,nullptr,IID_PPV_ARGS(texture->ReleaseAndGetAddressOf())))) { delete texture; return nullptr; }
-    if(ctx->nextSrv>=4096){delete texture;return nullptr;}
+    UINT srvIndex=0;
+    if(!ctx->freeSrv.empty()){srvIndex=ctx->freeSrv.back();ctx->freeSrv.pop_back();}
+    else { if(ctx->nextSrv>=4096){delete texture;return nullptr;} srvIndex=ctx->nextSrv++; }
     D3D12_SHADER_RESOURCE_VIEW_DESC sv{}; sv.Format=DXGI_FORMAT_R8G8B8A8_UNORM; sv.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2D; sv.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING; sv.Texture2D.MipLevels=1;
-    auto cpu=ctx->srvHeap->GetCPUDescriptorHandleForHeapStart(); cpu.ptr+=static_cast<SIZE_T>(ctx->nextSrv)*ctx->srvStride;
+    auto cpu=ctx->srvHeap->GetCPUDescriptorHandleForHeapStart(); cpu.ptr+=static_cast<SIZE_T>(srvIndex)*ctx->srvStride;
     ctx->device->CreateShaderResourceView(texture->Get(),&sv,cpu);
-    ctx->srvByResource[texture->Get()]=ctx->nextSrv;
-    ++ctx->nextSrv;
+    ctx->srvByResource[texture->Get()]=srvIndex;
     return texture;
 }
 
@@ -132,7 +142,22 @@ MOTOR2_API int motor2_d3d12_upload_rgba8(void* context, void* resource, const vo
     UINT64 tf=++ctx->fenceValue; if(FAILED(hr=ctx->directQueue->Signal(ctx->fence.Get(),tf))) return hr; if(ctx->fence->GetCompletedValue()<tf){if(FAILED(hr=ctx->fence->SetEventOnCompletion(tf,ctx->fenceEvent))) return hr; WaitForSingleObject(ctx->fenceEvent,INFINITE);} return S_OK;
 }
 
-MOTOR2_API void motor2_d3d12_release_resource(void* resource) { delete static_cast<ComPtr<ID3D12Resource>*>(resource); }
+static void WaitForGpu(NativeContext* ctx) {
+    if(!ctx||!ctx->directQueue||!ctx->fence) return;
+    const UINT64 fv=++ctx->fenceValue;
+    if(SUCCEEDED(ctx->directQueue->Signal(ctx->fence.Get(),fv)) && ctx->fence->GetCompletedValue()<fv && ctx->fenceEvent && SUCCEEDED(ctx->fence->SetEventOnCompletion(fv,ctx->fenceEvent))) WaitForSingleObject(ctx->fenceEvent,INFINITE);
+}
+
+MOTOR2_API void motor2_d3d12_release_resource(void* context, void* resource) {
+    auto* ctx=static_cast<NativeContext*>(context); auto* tex=static_cast<ComPtr<ID3D12Resource>*>(resource); if(!tex)return;
+    WaitForGpu(ctx);
+    if(ctx && tex->Get()){auto it=ctx->srvByResource.find(tex->Get()); if(it!=ctx->srvByResource.end()){ctx->freeSrv.push_back(it->second);ctx->srvByResource.erase(it);}}
+    delete tex;
+}
+
+MOTOR2_API void motor2_d3d12_release_render_target(void* context, void* target) {
+    auto* ctx=static_cast<NativeContext*>(context); auto* rt=static_cast<NativeRenderTarget*>(target); if(!rt)return; WaitForGpu(ctx); delete rt;
+}
 
 
 
