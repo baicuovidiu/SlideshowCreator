@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.24)
 project(Motor2Native LANGUAGES CXX)
+if(MSVC)
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
 add_library(Motor2Native SHARED src/d3d12_device.cpp)
 target_compile_features(Motor2Native PRIVATE cxx_std_20)
 target_include_directories(Motor2Native PUBLIC include)
