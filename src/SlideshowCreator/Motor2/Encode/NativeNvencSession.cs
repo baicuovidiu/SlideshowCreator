@@ -8,7 +8,7 @@ public sealed class NativeNvencSession : INvencNativeSession
     private nint _session;
     private readonly Dictionary<ulong,byte[]> _bitstreams=new();
     private readonly Dictionary<ulong,nint> _convertedTargets=new();
-    private PixelSize _size;
+    private PixelSize _size = new(1,1);
     public NativeNvencSession(D3D12NativeDeviceContext device)=>_device=device;
 
     public ValueTask OpenAsync(EncoderSettings settings,CancellationToken ct)
