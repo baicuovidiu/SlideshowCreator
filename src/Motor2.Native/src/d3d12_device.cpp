@@ -338,14 +338,16 @@ MOTOR2_API void* motor2_nvenc_open_d3d12(void* d3d12Context,const Motor2NvencSes
     // Motor2 correctness baseline: deterministic one-input/one-output behavior.
     // NVIDIA documents that lookahead/B-frame reordering can return NEED_MORE_INPUT.
     // Disable both until the asynchronous output queue is implemented and hardware-proven.
-    cfg.frameIntervalP=1;
+    // Keep the preset internally coherent. We only override fields that are valid
+    // independently of optional lookahead/adaptive-B capabilities.
+    cfg.frameIntervalP=1; // no B-frame reordering
     cfg.rcParams.enableLookahead=0;
     cfg.rcParams.lookaheadDepth=0;
-    cfg.rcParams.disableBadapt=1;
     cfg.rcParams.rateControlMode=NV_ENC_PARAMS_RC_VBR;
     cfg.rcParams.averageBitRate=settings->bitrate;
     cfg.rcParams.maxBitRate=settings->bitrate+settings->bitrate/2;
     ip.tuningInfo=NV_ENC_TUNING_INFO_HIGH_QUALITY;
+    ip.enableEncodeAsync=0; // Hardware Gate uses blocking NvEncLockBitstream.
     {auto st=s->api.nvEncInitializeEncoder(s->encoder,&ip);if(st!=NV_ENC_SUCCESS){g_motor2NvencOpenStatus=40000+(int)st;s->api.nvEncDestroyEncoder(s->encoder);s->nvencDll=nullptr;delete s;FreeLibrary(dll);return nullptr;}}
     g_motor2NvencOpenStatus=1; return s;
 #endif
