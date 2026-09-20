@@ -81,7 +81,7 @@ public sealed class D3D12NativeDeviceContext : ID3D12CompositorDevice
         for(var i=0;i<commands.Count;i++)
         {
             var command=commands[i];
-            if(command.Texture.NativeHandle is not nint texture || texture==0) throw new ArgumentException("GPU texture has no native D3D12 handle.");
+            if(command.Texture.NativeResource is not nint texture || texture==0) throw new ArgumentException("GPU texture has no native D3D12 handle.");
             var m=command.Transform;
             native[i]=new Motor2Native.DrawQuad{Texture=texture,M11=m.M11,M12=m.M12,M21=m.M21,M22=m.M22,M31=m.M31,M32=m.M32,Opacity=command.Opacity,Z=command.Z};
         }
