@@ -7,6 +7,8 @@ public sealed class D3D12NativeDeviceContext : ID3D12CompositorDevice
     private nint _nativeContext;
     private bool _initialized;
 
+    internal nint NativeContextForInterop { get { EnsureReady(); return _nativeContext; } }
+
     public string AdapterName { get; private set; } = "Uninitialized";
     public long DedicatedVideoMemoryBytes { get; private set; }
 
