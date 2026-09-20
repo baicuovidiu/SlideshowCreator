@@ -28,6 +28,12 @@ jobs:
           cmake -S .\\src\\Motor2.Native -B .\\artifacts\\motor2-native -A x64
           cmake --build .\\artifacts\\motor2-native --config Release
 
+      - name: Compile hardware gate
+        shell: pwsh
+        run: |
+          dotnet restore .\src\Motor2.HardwareGate\Motor2.HardwareGate.csproj
+          dotnet build .\src\Motor2.HardwareGate\Motor2.HardwareGate.csproj -c Release --no-restore
+
       - name: Architecture guard
         shell: pwsh
         run: |
