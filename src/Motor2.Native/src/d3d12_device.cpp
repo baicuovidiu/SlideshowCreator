@@ -9,7 +9,9 @@
 #include <cstring>
 #include <unordered_map>
 #include <vector>
+#ifdef MOTOR2_HAS_NVENC_SDK
 #include <nvEncodeAPI.h>
+#endif
 
 using Microsoft::WRL::ComPtr;
 
@@ -256,8 +258,9 @@ MOTOR2_API int motor2_d3d12_readback_rgba16f(void* context, void* target, void* 
 
 MOTOR2_API int motor2_nvenc_probe(Motor2NvencProbeInfo* info) {
     if(!info) return E_POINTER;
+    info->apiVersion = 0; info->maxSupportedVersion = 0;
+#ifdef MOTOR2_HAS_NVENC_SDK
     info->apiVersion = NVENCAPI_VERSION;
-    info->maxSupportedVersion = 0;
     HMODULE dll=LoadLibraryW(sizeof(void*)==8 ? L"nvEncodeAPI64.dll" : L"nvEncodeAPI.dll");
     if(!dll) return HRESULT_FROM_WIN32(GetLastError());
     using GetMaxFn = NVENCSTATUS (NVENCAPI*)(uint32_t*);
@@ -268,4 +271,7 @@ MOTOR2_API int motor2_nvenc_probe(Motor2NvencProbeInfo* info) {
     info->maxSupportedVersion=maxVersion;
     const uint32_t required=(NVENCAPI_MAJOR_VERSION<<4)|NVENCAPI_MINOR_VERSION;
     return maxVersion>=required ? S_OK : HRESULT_FROM_WIN32(ERROR_OLD_WIN_VERSION);
+#else
+    return E_NOTIMPL;
+#endif
 }
