@@ -18,6 +18,7 @@ using Microsoft::WRL::ComPtr;
 struct NativeRenderTarget {
     ComPtr<ID3D12Resource> resource;
     ComPtr<ID3D12DescriptorHeap> rtvHeap;
+    std::uint32_t width=0,height=0;
 };
 
 struct NativeContext {
@@ -192,7 +193,7 @@ float4 PS(VSOut i):SV_TARGET { float4 c=tex0.Sample(samp0,i.uv); return float4(c
 
 MOTOR2_API void* motor2_d3d12_create_render_target(void* context, std::uint32_t width, std::uint32_t height) {
     auto* ctx=static_cast<NativeContext*>(context); if(!ctx||!width||!height) return nullptr;
-    auto* target=new NativeRenderTarget();
+    auto* target=new NativeRenderTarget(); target->width=width; target->height=height;
     D3D12_HEAP_PROPERTIES heap{}; heap.Type=D3D12_HEAP_TYPE_DEFAULT;
     D3D12_RESOURCE_DESC d{}; d.Dimension=D3D12_RESOURCE_DIMENSION_TEXTURE2D; d.Width=width; d.Height=height; d.DepthOrArraySize=1; d.MipLevels=1; d.Format=DXGI_FORMAT_R16G16B16A16_FLOAT; d.SampleDesc.Count=1; d.Layout=D3D12_TEXTURE_LAYOUT_UNKNOWN; d.Flags=D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
     D3D12_CLEAR_VALUE clear{}; clear.Format=d.Format; clear.Color[3]=1.0f;
@@ -315,7 +316,17 @@ MOTOR2_API int motor2_nvenc_submit(void* session,void* renderTarget,std::int64_t
 #else
     auto* s=static_cast<NativeNvencSession*>(session); auto* rt=static_cast<NativeRenderTarget*>(renderTarget); if(!s||!rt||!submissionId)return E_INVALIDARG;
     WaitForGpu(s->d3d);
-    NV_ENC_REGISTER_RESOURCE rr{}; rr.version=NV_ENC_REGISTER_RESOURCE_VER; rr.resourceType=NV_ENC_INPUT_RESOURCE_TYPE_DIRECTX; rr.resourceToRegister=rt->resource.Get(); rr.width=s->settings.width; rr.height=s->settings.height; rr.pitch=0; rr.bufferFormat=NV_ENC_BUFFER_FORMAT_ARGB10; rr.bufferUsage=NV_ENC_INPUT_IMAGE;
+    // The compositor target is FP16 (R16G16B16A16_FLOAT). NVENC does not accept that surface
+    // as an H.264 input resource. Reject it here instead of lying about a direct compatible path.
+    // A dedicated GPU conversion target (NV12/P010) is required before registration.
+    const auto desc=rt->resource->GetDesc();
+    if(desc.Format==DXGI_FORMAT_R16G16B16A16_FLOAT) return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
+    NV_ENC_BUFFER_FORMAT fmt=NV_ENC_BUFFER_FORMAT_UNDEFINED;
+    if(desc.Format==DXGI_FORMAT_NV12) fmt=NV_ENC_BUFFER_FORMAT_NV12;
+    else if(desc.Format==DXGI_FORMAT_P010) fmt=NV_ENC_BUFFER_FORMAT_YUV420_10BIT;
+    else if(desc.Format==DXGI_FORMAT_B8G8R8A8_UNORM) fmt=NV_ENC_BUFFER_FORMAT_ARGB;
+    else return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
+    NV_ENC_REGISTER_RESOURCE rr{}; rr.version=NV_ENC_REGISTER_RESOURCE_VER; rr.resourceType=NV_ENC_INPUT_RESOURCE_TYPE_DIRECTX; rr.resourceToRegister=rt->resource.Get(); rr.width=rt->width; rr.height=rt->height; rr.pitch=0; rr.bufferFormat=fmt; rr.bufferUsage=NV_ENC_INPUT_IMAGE;
     if(s->api.nvEncRegisterResource(s->encoder,&rr)!=NV_ENC_SUCCESS)return E_FAIL;
     NV_ENC_MAP_INPUT_RESOURCE mr{}; mr.version=NV_ENC_MAP_INPUT_RESOURCE_VER; mr.registeredResource=rr.registeredResource; if(s->api.nvEncMapInputResource(s->encoder,&mr)!=NV_ENC_SUCCESS){s->api.nvEncUnregisterResource(s->encoder,rr.registeredResource);return E_FAIL;}
     NV_ENC_CREATE_BITSTREAM_BUFFER bb{}; bb.version=NV_ENC_CREATE_BITSTREAM_BUFFER_VER; if(s->api.nvEncCreateBitstreamBuffer(s->encoder,&bb)!=NV_ENC_SUCCESS){s->api.nvEncUnmapInputResource(s->encoder,mr.mappedResource);s->api.nvEncUnregisterResource(s->encoder,rr.registeredResource);return E_FAIL;}
