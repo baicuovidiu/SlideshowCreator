@@ -84,7 +84,7 @@ jobs:
           using System.IO.Compression;
           using System.Reflection;
           class Program {
-            [STAThread] static int Main() {
+            [STAThread] static int Main(string[] args) {
               var root=Path.Combine(Path.GetTempPath(),"Motor2HardwareGate_"+Guid.NewGuid().ToString("N"));
               Directory.CreateDirectory(root);
               try {
@@ -93,6 +93,9 @@ jobs:
                 z.ExtractToDirectory(root);
                 var exe=Path.Combine(root,"Motor2.HardwareGate.exe");
                 if(!File.Exists(exe)) throw new FileNotFoundException("Embedded Hardware Gate missing.",exe);
+                var native=Path.Combine(root,"Motor2Native.dll");
+                if(!File.Exists(native)) throw new FileNotFoundException("Embedded Motor2Native.dll missing.",native);
+                if(args.Length>0 && args[0]=="--verify-payload") { Console.WriteLine("PASS: embedded payload extracted; child EXE and native DLL found."); return 0; }
                 var p=Process.Start(new ProcessStartInfo(exe){UseShellExecute=false,WorkingDirectory=root}) ?? throw new Exception("Cannot start embedded gate.");
                 p.WaitForExit();
                 return p.ExitCode;
@@ -110,23 +113,8 @@ jobs:
           dotnet publish (Join-Path $proj 'OneExeLauncher.csproj') -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o (Join-Path $pwd 'artifacts\Motor2-HardwareGate-ONE-EXE')
           $launcher=Join-Path $pwd 'artifacts\Motor2-HardwareGate-ONE-EXE\Motor2_HardwareGate_RTX4060.exe'
           if (-not (Test-Path $launcher)) { throw 'FAIL: ONE-EXE launcher missing' }
-          $verifyProj = Join-Path $pwd 'artifacts\VerifyEmbeddedPayload'
-          New-Item -ItemType Directory -Force -Path $verifyProj | Out-Null
-          @'
-          <Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>
-          '@ | Set-Content (Join-Path $verifyProj 'VerifyEmbeddedPayload.csproj')
-          @'
-          using System.Reflection;
-          var asm=Assembly.LoadFrom(args[0]);
-          var names=asm.GetManifestResourceNames();
-          if(!names.Contains("payload.zip")) { Console.Error.WriteLine("FAIL resources: "+string.Join(",",names)); return 2; }
-          using var s=asm.GetManifestResourceStream("payload.zip");
-          if(s is null || s.Length<1024) { Console.Error.WriteLine("FAIL payload stream"); return 3; }
-          Console.WriteLine($"Embedded payload OK: {s.Length} bytes");
-          return 0;
-          '@ | Set-Content (Join-Path $verifyProj 'Program.cs')
-          dotnet run --project (Join-Path $verifyProj 'VerifyEmbeddedPayload.csproj') -c Release -- $launcher
-          if ($LASTEXITCODE -ne 0) { throw 'FAIL: embedded payload verification failed' }
+          & $launcher --verify-payload
+          if ($LASTEXITCODE -ne 0) { throw 'FAIL: ONE-EXE runtime payload verification failed' }
           Get-FileHash $launcher -Algorithm SHA256
           if ((Get-Item $launcher).Length -lt 1000000) { throw 'FAIL: ONE-EXE launcher unexpectedly small' }
 
@@ -136,7 +124,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $launcher=Join-Path $pwd 'artifacts\Motor2-HardwareGate-ONE-EXE\Motor2_HardwareGate_RTX4060.exe'
-          $tag='motor2-hardware-gate-173'
+          $tag='motor2-hardware-gate-174'
           gh release view $tag --repo ${{ github.repository }} *> $null
           if ($LASTEXITCODE -ne 0) {
             gh release create $tag $launcher --repo ${{ github.repository }} --target ${{ github.sha }} --title 'Motor 2.0 Hardware Gate RTX 4060' --notes 'Hardware Gate 900-frame validation build. Not the slideshow application.' --prerelease
