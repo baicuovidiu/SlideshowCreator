@@ -22,11 +22,18 @@ jobs:
         run: |
           dotnet restore .\src\SlideshowCreator\SlideshowCreator.csproj
           dotnet build .\src\SlideshowCreator\SlideshowCreator.csproj -c Release --no-restore
-      - name: Compile native D3D12 core
+      - name: Acquire NVENC 13.1 headers
         shell: pwsh
         run: |
-          cmake -S .\\src\\Motor2.Native -B .\\artifacts\\motor2-native -A x64
+          git clone --depth 1 https://github.com/FFmpeg/nv-codec-headers.git .\\artifacts\\nv-codec-headers
+          if (-not (Test-Path '.\\artifacts\\nv-codec-headers\\include\\ffnvcodec\\nvEncodeAPI.h')) { throw 'nvEncodeAPI.h missing' }
+
+      - name: Compile native D3D12 plus REAL NVENC branch
+        shell: pwsh
+        run: |
+          cmake -S .\\src\\Motor2.Native -B .\\artifacts\\motor2-native -A x64 -DNVENC_SDK_INCLUDE="$pwd\\artifacts\\nv-codec-headers\\include\\ffnvcodec"
           cmake --build .\\artifacts\\motor2-native --config Release
+          if (-not (Test-Path '.\\artifacts\\motor2-native\\Release\\Motor2Native.dll')) { throw 'Motor2Native.dll missing' }
 
       - name: Compile hardware gate
         shell: pwsh
@@ -42,7 +49,7 @@ jobs:
       - name: Upload hardware gate managed package
         uses: actions/upload-artifact@v4
         with:
-          name: Motor2-HardwareGate-win-x64-managed
+          name: Motor2-HardwareGate-win-x64-REAL-NVENC
           path: artifacts/Motor2-HardwareGate
           if-no-files-found: error
 
