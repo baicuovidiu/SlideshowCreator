@@ -8,6 +8,7 @@ public sealed class BoundedGpuResourceCache : IGpuResourceCache
     private readonly ConcurrentDictionary<string,Entry> _items=new();
     private readonly IGpuUploadBackend _upload;
     private long _tick;
+    private readonly SemaphoreSlim _gate=new(1,1);
     public long BudgetBytes { get; }
     public long ResidentBytes => _items.Values.Sum(x=>x.Texture.EstimatedBytes);
 
@@ -30,23 +31,36 @@ public sealed class BoundedGpuResourceCache : IGpuResourceCache
     {
         var hit=await TryGetAsync(request,ct);
         if(hit is not null)return hit;
-        var texture=await _upload.UploadAsync(decoded,ct);
-        if(texture.EstimatedBytes>BudgetBytes)return texture;
-        _items[Key(request)]=new(texture,Interlocked.Increment(ref _tick));
-        await TrimAsync(ct);
-        return texture;
+        await _gate.WaitAsync(ct);
+        try
+        {
+            hit=await TryGetAsync(request,ct);
+            if(hit is not null)return hit;
+            var texture=await _upload.UploadAsync(decoded,ct);
+            if(texture.EstimatedBytes>BudgetBytes)return texture;
+            _items[Key(request)]=new(texture,Interlocked.Increment(ref _tick));
+            // Do not evict here: the caller is assembling a frame and earlier returned textures
+            // may still be referenced by that frame. Trimming is an explicit safe-point operation.
+            return texture;
+        }
+        finally { _gate.Release(); }
     }
 
     public async ValueTask TrimAsync(CancellationToken ct)
     {
-        while(ResidentBytes>BudgetBytes)
+        await _gate.WaitAsync(ct);
+        try
         {
-            ct.ThrowIfCancellationRequested();
-            var victim=_items.OrderBy(x=>x.Value.Tick).FirstOrDefault();
-            if(victim.Key is null)break;
-            if(_items.TryRemove(victim.Key,out var removed))
-                await _upload.ReleaseAsync(removed.Texture,ct);
+            while(ResidentBytes>BudgetBytes)
+            {
+                ct.ThrowIfCancellationRequested();
+                var victim=_items.OrderBy(x=>x.Value.Tick).FirstOrDefault();
+                if(victim.Key is null)break;
+                if(_items.TryRemove(victim.Key,out var removed))
+                    await _upload.ReleaseAsync(removed.Texture,ct);
+            }
         }
+        finally { _gate.Release(); }
     }
     private static string Key(DecodeRequest r)=>$"{r.Asset.Value}:{r.RequiredFootprint.Width}x{r.RequiredFootprint.Height}:{r.ExportQuality}";
 }
