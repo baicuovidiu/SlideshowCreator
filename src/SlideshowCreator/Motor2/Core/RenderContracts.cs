@@ -56,7 +56,7 @@ public interface IFramePlanner
 public interface IGraphicsBackend
 {
     ValueTask InitializeAsync(HardwareCapabilities capabilities, CancellationToken ct);
-    ValueTask<object> ComposeAsync(FramePlan frame, IReadOnlyDictionary<AssetId, DecodedSurface> surfaces, CancellationToken ct);
+    ValueTask<object> ComposeAsync(FramePlan frame, IReadOnlyDictionary<AssetId, GpuTextureHandle> textures, CancellationToken ct);
 }
 
 public interface IVideoEncodeBackend
