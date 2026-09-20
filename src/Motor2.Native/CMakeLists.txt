@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.24)
+project(Motor2Native LANGUAGES CXX)
+add_library(Motor2Native SHARED src/d3d12_device.cpp)
+target_compile_features(Motor2Native PRIVATE cxx_std_20)
+target_include_directories(Motor2Native PUBLIC include)
+target_compile_definitions(Motor2Native PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_link_libraries(Motor2Native PRIVATE d3d12 dxgi dxguid)
