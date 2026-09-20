@@ -12,8 +12,14 @@ public sealed class WindowsHardwareProfiler : IHardwareProfiler
         return new HardwareCapabilities(
             d3d12?.Name ?? nvidia?.Name ?? "Windows graphics adapter",
             d3d12?.VramBytes ?? nvidia?.VramBytes ?? 0,
-            D3D12:d3d12 is not null, Cuda:false, NvDec:false, NvEnc:false,
+            D3D12:d3d12 is not null, Cuda:false, NvDec:false, NvEnc:TryNvencProbe(),
             ImmutableArray<string>.Empty, ImmutableArray<string>.Empty);
+    }
+
+    private static bool TryNvencProbe()
+    {
+        if(!OperatingSystem.IsWindows())return false;
+        try { Motor2Native.NvencProbeInfo info=default; return Motor2Native.NvencProbe(ref info)>=0; } catch { return false; }
     }
 
     private static unsafe (string Name,long VramBytes)? TryD3D12Probe()
