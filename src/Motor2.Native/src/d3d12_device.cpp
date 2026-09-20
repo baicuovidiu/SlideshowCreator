@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <dxgi1_6.h>
 #include <d3d12.h>
+#include <d3dcompiler.h>
 #include <wrl/client.h>
 #include <algorithm>
 #include <cwchar>
@@ -18,6 +19,8 @@ struct NativeContext {
     ComPtr<ID3D12Fence> fence;
     UINT64 fenceValue = 0;
     HANDLE fenceEvent = nullptr;
+    ComPtr<ID3D12RootSignature> rootSignature;
+    ComPtr<ID3D12PipelineState> pipelineState;
 };
 
 static HRESULT SelectAdapter(IDXGIFactory6* factory, IDXGIAdapter1** selected) {
@@ -102,6 +105,33 @@ MOTOR2_API int motor2_d3d12_upload_rgba8(void* context, void* resource, const vo
 MOTOR2_API void motor2_d3d12_release_resource(void* resource) { delete static_cast<ComPtr<ID3D12Resource>*>(resource); }
 
 
+
+static HRESULT EnsureQuadPipeline(NativeContext* ctx) {
+    if (ctx->pipelineState) return S_OK;
+    const char* shader = R"(
+struct VSOut { float4 pos:SV_POSITION; float2 uv:TEXCOORD0; };
+cbuffer DrawCB : register(b0) { float4 r0; float4 r1; };
+VSOut VS(uint id:SV_VertexID) {
+    float2 p[6]={{-1,-1},{-1,1},{1,1},{-1,-1},{1,1},{1,-1}};
+    float2 uv[6]={{0,1},{0,0},{1,0},{0,1},{1,0},{1,1}};
+    float2 q=p[id]; VSOut o;
+    o.pos=float4(q.x*r0.x+q.y*r0.z+r1.x, q.x*r0.y+q.y*r0.w+r1.y, r1.z, 1);
+    o.uv=uv[id]; return o;
+}
+Texture2D tex0:register(t0); SamplerState samp0:register(s0);
+float4 PS(VSOut i):SV_TARGET { return tex0.Sample(samp0,i.uv)*r1.w; })";
+    ComPtr<ID3DBlob> vs, ps, err;
+    HRESULT hr=D3DCompile(shader,strlen(shader),nullptr,nullptr,nullptr,"VS","vs_5_1",0,0,&vs,&err); if(FAILED(hr)) return hr;
+    hr=D3DCompile(shader,strlen(shader),nullptr,nullptr,nullptr,"PS","ps_5_1",0,0,&ps,&err); if(FAILED(hr)) return hr;
+    D3D12_DESCRIPTOR_RANGE range{}; range.RangeType=D3D12_DESCRIPTOR_RANGE_TYPE_SRV; range.NumDescriptors=1; range.BaseShaderRegister=0;
+    D3D12_ROOT_PARAMETER params[2]{}; params[0].ParameterType=D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS; params[0].Constants.Num32BitValues=8; params[0].ShaderVisibility=D3D12_SHADER_VISIBILITY_VERTEX; params[1].ParameterType=D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE; params[1].DescriptorTable.NumDescriptorRanges=1; params[1].DescriptorTable.pDescriptorRanges=&range; params[1].ShaderVisibility=D3D12_SHADER_VISIBILITY_PIXEL;
+    D3D12_STATIC_SAMPLER_DESC samp{}; samp.Filter=D3D12_FILTER_MIN_MAG_MIP_LINEAR; samp.AddressU=samp.AddressV=samp.AddressW=D3D12_TEXTURE_ADDRESS_MODE_CLAMP; samp.ShaderVisibility=D3D12_SHADER_VISIBILITY_PIXEL;
+    D3D12_ROOT_SIGNATURE_DESC rs{}; rs.NumParameters=2; rs.pParameters=params; rs.NumStaticSamplers=1; rs.pStaticSamplers=&samp; rs.Flags=D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+    ComPtr<ID3DBlob> sig; hr=D3D12SerializeRootSignature(&rs,D3D_ROOT_SIGNATURE_VERSION_1,&sig,&err); if(FAILED(hr)) return hr; hr=ctx->device->CreateRootSignature(0,sig->GetBufferPointer(),sig->GetBufferSize(),IID_PPV_ARGS(&ctx->rootSignature)); if(FAILED(hr)) return hr;
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC p{}; p.pRootSignature=ctx->rootSignature.Get(); p.VS={vs->GetBufferPointer(),vs->GetBufferSize()}; p.PS={ps->GetBufferPointer(),ps->GetBufferSize()}; p.BlendState.AlphaToCoverageEnable=FALSE; p.BlendState.IndependentBlendEnable=FALSE; auto& rt=p.BlendState.RenderTarget[0]; rt.BlendEnable=TRUE; rt.SrcBlend=D3D12_BLEND_SRC_ALPHA; rt.DestBlend=D3D12_BLEND_INV_SRC_ALPHA; rt.BlendOp=D3D12_BLEND_OP_ADD; rt.SrcBlendAlpha=D3D12_BLEND_ONE; rt.DestBlendAlpha=D3D12_BLEND_INV_SRC_ALPHA; rt.BlendOpAlpha=D3D12_BLEND_OP_ADD; rt.RenderTargetWriteMask=D3D12_COLOR_WRITE_ENABLE_ALL; p.SampleMask=UINT_MAX; p.RasterizerState.FillMode=D3D12_FILL_MODE_SOLID; p.RasterizerState.CullMode=D3D12_CULL_MODE_NONE; p.RasterizerState.DepthClipEnable=TRUE; p.DepthStencilState.DepthEnable=FALSE; p.DepthStencilState.StencilEnable=FALSE; p.PrimitiveTopologyType=D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE; p.NumRenderTargets=1; p.RTVFormats[0]=DXGI_FORMAT_R16G16B16A16_FLOAT; p.SampleDesc.Count=1;
+    return ctx->device->CreateGraphicsPipelineState(&p,IID_PPV_ARGS(&ctx->pipelineState));
+}
+
 MOTOR2_API void* motor2_d3d12_create_render_target(void* context, std::uint32_t width, std::uint32_t height) {
     auto* ctx=static_cast<NativeContext*>(context); if(!ctx||!width||!height) return nullptr;
     auto* target=new ComPtr<ID3D12Resource>();
@@ -117,8 +147,9 @@ MOTOR2_API int motor2_d3d12_begin_frame(void* context, void* target) {
 
 MOTOR2_API int motor2_d3d12_draw_quads(void* context, void* target, const Motor2DrawQuad* commands, std::uint32_t count) {
     if(!context||!target||(count&&!commands)) return E_INVALIDARG;
-    // ABI and retained draw-list boundary are live. PSO/root signature/descriptor heap follow next.
-    // No CPU readback and no media re-decode are permitted here.
+    auto* ctx=static_cast<NativeContext*>(context);
+    HRESULT hr=EnsureQuadPipeline(ctx); if(FAILED(hr)) return hr;
+    // Pipeline/root signature/shaders are now real. Descriptor heap + RTV command recording follow next.
     return S_OK;
 }
 
