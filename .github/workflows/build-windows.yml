@@ -63,27 +63,37 @@ jobs:
           $stage = Join-Path $pwd 'artifacts\Motor2-HardwareGate'
           $payload = Join-Path $pwd 'artifacts\Motor2-HardwareGate-payload.zip'
           Compress-Archive -Path "$stage\*" -DestinationPath $payload -Force
-          $sfx = Join-Path $pwd 'artifacts\Motor2-HardwareGate-ONE-EXE'
-          New-Item -ItemType Directory -Force -Path $sfx | Out-Null
-          $launcher = Join-Path $sfx 'Motor2_HardwareGate_RTX4060.exe'
-          $payloadB64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($payload))
-          $src = @"
+          $proj = Join-Path $pwd 'artifacts\OneExeLauncher'
+          New-Item -ItemType Directory -Force -Path $proj | Out-Null
+          Copy-Item $payload (Join-Path $proj 'payload.zip') -Force
+          @'
+          <Project Sdk="Microsoft.NET.Sdk">
+            <PropertyGroup>
+              <OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework>
+              <RuntimeIdentifier>win-x64</RuntimeIdentifier><SelfContained>true</SelfContained>
+              <PublishSingleFile>true</PublishSingleFile><EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+              <AssemblyName>Motor2_HardwareGate_RTX4060</AssemblyName>
+            </PropertyGroup>
+            <ItemGroup><EmbeddedResource Include="payload.zip" /></ItemGroup>
+          </Project>
+          '@ | Set-Content (Join-Path $proj 'OneExeLauncher.csproj')
+          @'
           using System;
           using System.Diagnostics;
           using System.IO;
           using System.IO.Compression;
+          using System.Reflection;
           class Program {
             [STAThread] static int Main() {
               var root=Path.Combine(Path.GetTempPath(),"Motor2HardwareGate_"+Guid.NewGuid().ToString("N"));
               Directory.CreateDirectory(root);
               try {
-                var zip=Path.Combine(root,"payload.zip");
-                File.WriteAllBytes(zip,Convert.FromBase64String("$payloadB64"));
-                ZipFile.ExtractToDirectory(zip,root);
-                File.Delete(zip);
+                using var s=Assembly.GetExecutingAssembly().GetManifestResourceStream("Motor2_HardwareGate_RTX4060.payload.zip") ?? throw new Exception("Embedded payload missing.");
+                using var z=new ZipArchive(s,ZipArchiveMode.Read);
+                z.ExtractToDirectory(root);
                 var exe=Path.Combine(root,"Motor2.HardwareGate.exe");
                 if(!File.Exists(exe)) throw new FileNotFoundException("Embedded Hardware Gate missing.",exe);
-                var p=Process.Start(new ProcessStartInfo(exe){UseShellExecute=false,WorkingDirectory=root});
+                var p=Process.Start(new ProcessStartInfo(exe){UseShellExecute=false,WorkingDirectory=root}) ?? throw new Exception("Cannot start embedded gate.");
                 p.WaitForExit();
                 return p.ExitCode;
               } catch(Exception ex) {
@@ -94,10 +104,10 @@ jobs:
               }
             }
           }
-          "@
-          Add-Type -TypeDefinition $src -OutputAssembly $launcher -OutputType ConsoleApplication -ReferencedAssemblies @('System.IO.Compression','System.IO.Compression.FileSystem')
+          '@ | Set-Content (Join-Path $proj 'Program.cs')
+          dotnet publish (Join-Path $proj 'OneExeLauncher.csproj') -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o (Join-Path $pwd 'artifacts\Motor2-HardwareGate-ONE-EXE')
+          $launcher=Join-Path $pwd 'artifacts\Motor2-HardwareGate-ONE-EXE\Motor2_HardwareGate_RTX4060.exe'
           if (-not (Test-Path $launcher)) { throw 'FAIL: ONE-EXE launcher missing' }
-          Write-Host 'ONE-EXE SHA256:'
           Get-FileHash $launcher -Algorithm SHA256
 
       - name: Upload ONE-EXE Hardware Gate
