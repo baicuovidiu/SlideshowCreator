@@ -149,12 +149,12 @@ VSOut VS(uint id:SV_VertexID) {
     o.uv=uv[id]; return o;
 }
 Texture2D tex0:register(t0); SamplerState samp0:register(s0);
-float4 PS(VSOut i):SV_TARGET { return tex0.Sample(samp0,i.uv)*r1.w; })";
+float4 PS(VSOut i):SV_TARGET { float4 c=tex0.Sample(samp0,i.uv); return float4(c.rgb,c.a*r1.w); })";
     ComPtr<ID3DBlob> vs, ps, err;
     HRESULT hr=D3DCompile(shader,strlen(shader),nullptr,nullptr,nullptr,"VS","vs_5_1",0,0,&vs,&err); if(FAILED(hr)) return hr;
     hr=D3DCompile(shader,strlen(shader),nullptr,nullptr,nullptr,"PS","ps_5_1",0,0,&ps,&err); if(FAILED(hr)) return hr;
     D3D12_DESCRIPTOR_RANGE range{}; range.RangeType=D3D12_DESCRIPTOR_RANGE_TYPE_SRV; range.NumDescriptors=1; range.BaseShaderRegister=0;
-    D3D12_ROOT_PARAMETER params[2]{}; params[0].ParameterType=D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS; params[0].Constants.Num32BitValues=8; params[0].ShaderVisibility=D3D12_SHADER_VISIBILITY_VERTEX; params[1].ParameterType=D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE; params[1].DescriptorTable.NumDescriptorRanges=1; params[1].DescriptorTable.pDescriptorRanges=&range; params[1].ShaderVisibility=D3D12_SHADER_VISIBILITY_PIXEL;
+    D3D12_ROOT_PARAMETER params[2]{}; params[0].ParameterType=D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS; params[0].Constants.Num32BitValues=8; params[0].ShaderVisibility=D3D12_SHADER_VISIBILITY_ALL; params[1].ParameterType=D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE; params[1].DescriptorTable.NumDescriptorRanges=1; params[1].DescriptorTable.pDescriptorRanges=&range; params[1].ShaderVisibility=D3D12_SHADER_VISIBILITY_PIXEL;
     D3D12_STATIC_SAMPLER_DESC samp{}; samp.Filter=D3D12_FILTER_MIN_MAG_MIP_LINEAR; samp.AddressU=samp.AddressV=samp.AddressW=D3D12_TEXTURE_ADDRESS_MODE_CLAMP; samp.ShaderVisibility=D3D12_SHADER_VISIBILITY_PIXEL;
     D3D12_ROOT_SIGNATURE_DESC rs{}; rs.NumParameters=2; rs.pParameters=params; rs.NumStaticSamplers=1; rs.pStaticSamplers=&samp; rs.Flags=D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
     ComPtr<ID3DBlob> sig; hr=D3D12SerializeRootSignature(&rs,D3D_ROOT_SIGNATURE_VERSION_1,&sig,&err); if(FAILED(hr)) return hr; hr=ctx->device->CreateRootSignature(0,sig->GetBufferPointer(),sig->GetBufferSize(),IID_PPV_ARGS(&ctx->rootSignature)); if(FAILED(hr)) return hr;
