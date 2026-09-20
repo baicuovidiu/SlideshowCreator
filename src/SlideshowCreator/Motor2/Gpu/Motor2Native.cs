@@ -27,4 +27,13 @@ internal static partial class Motor2Native
 
     [LibraryImport(LibraryName, EntryPoint = "motor2_d3d12_destroy")]
     internal static partial void Destroy(nint context);
+
+    [LibraryImport(LibraryName, EntryPoint = "motor2_d3d12_create_texture_rgba8")]
+    internal static partial nint CreateTextureRgba8(nint context, uint width, uint height);
+
+    [LibraryImport(LibraryName, EntryPoint = "motor2_d3d12_upload_rgba8")]
+    internal static unsafe partial int UploadRgba8(nint context, nint texture, void* pixels, uint rowPitch, uint height);
+
+    [LibraryImport(LibraryName, EntryPoint = "motor2_d3d12_release_resource")]
+    internal static partial void ReleaseResource(nint resource);
 }
