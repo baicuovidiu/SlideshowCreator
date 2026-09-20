@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cwchar>
 #include <cstring>
+#include <unordered_map>
 
 using Microsoft::WRL::ComPtr;
 
@@ -26,6 +27,7 @@ struct NativeContext {
     UINT rtvStride = 0;
     UINT srvStride = 0;
     UINT nextSrv = 0;
+    std::unordered_map<ID3D12Resource*, UINT> srvByResource;
 };
 
 static HRESULT SelectAdapter(IDXGIFactory6* factory, IDXGIAdapter1** selected) {
@@ -99,6 +101,7 @@ MOTOR2_API void* motor2_d3d12_create_texture_rgba8(void* context, std::uint32_t 
     D3D12_SHADER_RESOURCE_VIEW_DESC sv{}; sv.Format=DXGI_FORMAT_R8G8B8A8_UNORM; sv.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2D; sv.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING; sv.Texture2D.MipLevels=1;
     auto cpu=ctx->srvHeap->GetCPUDescriptorHandleForHeapStart(); cpu.ptr+=static_cast<SIZE_T>(ctx->nextSrv)*ctx->srvStride;
     ctx->device->CreateShaderResourceView(texture->Get(),&sv,cpu);
+    ctx->srvByResource[texture->Get()]=ctx->nextSrv;
     ++ctx->nextSrv;
     return texture;
 }
@@ -180,7 +183,8 @@ MOTOR2_API int motor2_d3d12_draw_quads(void* context, void* target, const Motor2
         const auto& q=commands[i]; if(!q.texture) continue;
         float constants[8]={q.m11,q.m12,q.m21,q.m22,q.m31,q.m32,q.z,q.opacity};
         list->SetGraphicsRoot32BitConstants(0,8,constants,0);
-        auto gpu=ctx->srvHeap->GetGPUDescriptorHandleForHeapStart(); gpu.ptr+=static_cast<UINT64>(i)*ctx->srvStride;
+        auto* tex=static_cast<ComPtr<ID3D12Resource>*>(q.texture); auto it=ctx->srvByResource.find(tex->Get()); if(it==ctx->srvByResource.end()) continue;
+        auto gpu=ctx->srvHeap->GetGPUDescriptorHandleForHeapStart(); gpu.ptr+=static_cast<UINT64>(it->second)*ctx->srvStride;
         list->SetGraphicsRootDescriptorTable(1,gpu); list->DrawInstanced(6,1,0,0);
     }
     if(FAILED(hr=list->Close())) return hr; ID3D12CommandList* lists[]={list.Get()}; ctx->directQueue->ExecuteCommandLists(1,lists);
