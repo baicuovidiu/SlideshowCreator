@@ -53,6 +53,9 @@ internal static partial class Motor2Native
     [LibraryImport(LibraryName, EntryPoint = "motor2_d3d12_end_frame")]
     internal static partial int EndFrame(nint context, nint target);
 
+    [LibraryImport(LibraryName, EntryPoint = "motor2_d3d12_readback_rgba16f")]
+    internal static unsafe partial int ReadbackRgba16f(nint context,nint target,void* destination,uint destinationBytes);
+
     [LibraryImport(LibraryName, EntryPoint = "motor2_d3d12_release_resource")]
     internal static partial void ReleaseResource(nint context, nint resource);
 
