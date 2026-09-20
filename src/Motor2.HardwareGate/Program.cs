@@ -6,8 +6,15 @@ using System.Text;
 string ResultPath=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),"Motor2_HardwareGate_RESULT.txt");
 void SaveResult(string status,string details){
     var body=$"Motor 2.0 Hardware Gate\r\nSTATUS: {status}\r\n{details}\r\nTime: {DateTime.Now:yyyy-MM-dd HH:mm:ss}\r\n";
-    File.WriteAllText(ResultPath,body,Encoding.UTF8);
-    Console.WriteLine(); Console.WriteLine(body); Console.WriteLine("Rezultatul a fost salvat pe Desktop:"); Console.WriteLine(ResultPath);
+    Console.WriteLine(); Console.WriteLine(body);
+    try {
+        File.WriteAllText(ResultPath,body,Encoding.UTF8);
+        Console.WriteLine("Rezultatul a fost salvat pe Desktop:"); Console.WriteLine(ResultPath);
+    } catch(Exception saveEx) {
+        var fallback=Path.Combine(Path.GetTempPath(),"Motor2_HardwareGate_RESULT.txt");
+        try { File.WriteAllText(fallback,body+"ResultSaveWarning: "+saveEx.Message+"\r\n",Encoding.UTF8); Console.WriteLine("Desktop indisponibil. Rezultat salvat temporar:"); Console.WriteLine(fallback); }
+        catch { Console.WriteLine("ATENTIE: rezultatul nu a putut fi scris in fisier. Fotografiaza textul de mai sus."); }
+    }
 }
 void Pause(){Console.WriteLine();Console.WriteLine("Fa o poza acestui rezultat sau trimite fisierul Motor2_HardwareGate_RESULT.txt.");Console.WriteLine("Apasa ENTER pentru inchidere...");Console.ReadLine();}
 void Fail(string message){SaveResult("FAIL",message);Pause();Environment.Exit(2);}
