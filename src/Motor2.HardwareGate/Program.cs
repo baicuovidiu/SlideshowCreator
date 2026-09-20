@@ -1,9 +1,16 @@
 using System.Collections.Immutable;
 using SlideshowCreator.Motor2.Core;
 using System.Security.Cryptography;
+using System.Text;
 
-static void Pause(){Console.WriteLine();Console.WriteLine("Apasa ENTER pentru inchidere...");Console.ReadLine();}
-static void Fail(string message){Console.Error.WriteLine("FAIL: "+message);Pause();Environment.Exit(2);}
+static readonly string ResultPath=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),"Motor2_HardwareGate_RESULT.txt");
+static void SaveResult(string status,string details){
+    var body=$"Motor 2.0 Hardware Gate\r\nSTATUS: {status}\r\n{details}\r\nTime: {DateTime.Now:yyyy-MM-dd HH:mm:ss}\r\n";
+    File.WriteAllText(ResultPath,body,Encoding.UTF8);
+    Console.WriteLine(); Console.WriteLine(body); Console.WriteLine("Rezultatul a fost salvat pe Desktop:"); Console.WriteLine(ResultPath);
+}
+static void Pause(){Console.WriteLine();Console.WriteLine("Fa o poza acestui rezultat sau trimite fisierul Motor2_HardwareGate_RESULT.txt.");Console.WriteLine("Apasa ENTER pentru inchidere...");Console.ReadLine();}
+static void Fail(string message){SaveResult("FAIL",message);Pause();Environment.Exit(2);}
 try
 {
     Console.WriteLine("Motor 2.0 NVENC Hardware Gate");
@@ -43,8 +50,8 @@ try
     bool annexB=first.AsSpan().IndexOf(new byte[]{0,0,1})>=0;
     if(!annexB)Fail("H.264 Annex-B start code not found.");
     var hash=Convert.ToHexString(SHA256.HashData(first));
-    Console.WriteLine($"PASS: frames={frames}, h264Bytes={totalBytes}, firstSHA256={hash}");
-    Console.WriteLine("PASS: D3D12 -> FP16 -> GPU BGRA -> NVENC H.264 -> completion -> release");
+    var details=$"Adapter={caps.AdapterName}\r\nVRAM={caps.DedicatedVideoMemoryBytes}\r\nD3D12={caps.D3D12}\r\nNVENC={caps.NvEnc}\r\nframes={frames}\r\nh264Bytes={totalBytes}\r\nfirstSHA256={hash}\r\nPipeline=D3D12 -> FP16 -> GPU BGRA -> NVENC H.264 -> completion -> release";
+    SaveResult("PASS",details);
     Pause();
     return 0;
 }
