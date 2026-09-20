@@ -25,12 +25,9 @@ public interface ID3D12CompositorDevice : ID3D12DeviceContext
 public sealed class D3D12Compositor : IGraphicsBackend
 {
     private readonly ID3D12CompositorDevice _device;
-    private readonly IGpuResourceCache _textures;
-    private readonly IDecodeService _decode;
     private PixelSize _size = new(1, 1);
 
-    public D3D12Compositor(ID3D12CompositorDevice device,IGpuResourceCache textures,IDecodeService decode)
-        =>(_device,_textures,_decode)=(device,textures,decode);
+    public D3D12Compositor(ID3D12CompositorDevice device) => _device = device;
 
     public async ValueTask InitializeAsync(HardwareCapabilities capabilities,CancellationToken ct)
     {
@@ -38,7 +35,7 @@ public sealed class D3D12Compositor : IGraphicsBackend
         await _device.InitializeAsync(ct);
     }
 
-    public async ValueTask<object> ComposeAsync(FramePlan frame,IReadOnlyDictionary<AssetId,DecodedSurface> surfaces,CancellationToken ct)
+    public async ValueTask<object> ComposeAsync(FramePlan frame,IReadOnlyDictionary<AssetId,GpuTextureHandle> textures,CancellationToken ct)
     {
         _size=frame.Scene.OutputSize;
         var target=await _device.CreateRenderTargetAsync(_size,ct);
@@ -46,10 +43,8 @@ public sealed class D3D12Compositor : IGraphicsBackend
         var commands=ImmutableArray.CreateBuilder<GpuDrawCommand>();
         foreach(var obj in frame.Scene.Objects.Where(x=>x.Opacity>0).OrderBy(x=>x.Z))
         {
-            var req=frame.RequiredAssets.FirstOrDefault(x=>x.Asset==obj.Asset);
-            if(req is null)continue;
-            if(!surfaces.TryGetValue(obj.Asset,out var decoded))decoded=await _decode.DecodeAsync(req,ct);
-            var tex=await _textures.GetOrUploadAsync(req,decoded,ct);
+            if(!textures.TryGetValue(obj.Asset,out var tex))
+                throw new InvalidOperationException($"GPU texture missing for asset {obj.Asset}.");
             var cmd=new GpuDrawCommand(obj.Asset,tex,obj.Transform,obj.Opacity,obj.Z,_size);
             await _device.DrawTexturedQuadAsync(target,cmd,ct);
             commands.Add(cmd);
