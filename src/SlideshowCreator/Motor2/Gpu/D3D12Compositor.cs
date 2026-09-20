@@ -18,6 +18,7 @@ public interface ID3D12CompositorDevice : ID3D12DeviceContext
     ValueTask DrawTexturedQuadsAsync(object target,IReadOnlyList<GpuDrawCommand> commands,CancellationToken ct);
     ValueTask EndFrameAsync(object target,CancellationToken ct);
     ValueTask ReleaseRenderTargetAsync(object target,CancellationToken ct);
+    ValueTask<byte[]> ReadbackRgba16fAsync(object target,PixelSize size,CancellationToken ct);
 }
 
 /// <summary>
