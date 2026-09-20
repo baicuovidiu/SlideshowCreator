@@ -108,18 +108,29 @@ public partial class MainWindow : Window
         var dir = Path.Combine(Path.GetTempPath(), "SlideshowCreator", Guid.NewGuid().ToString("N")); Directory.CreateDirectory(dir);
         try
         {
-            var clips = new List<string>(); int i = 0;
+            // Salvage path: one FFmpeg render graph + one encode.
+            // This removes the old N-times H.264 encode + concat bottleneck.
+            var inputs = new StringBuilder();
+            var filters = new StringBuilder();
+            var concatInputs = new StringBuilder();
+            int i = 0;
             foreach (var m in Media)
             {
-                var c = Path.Combine(dir, $"c{i++:0000}.mp4");
-                var vf = "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,fps=30,format=yuv420p";
-                if (m.Type == "Foto") Ffmpeg($"-y -loop 1 -t {F(m.Duration)} -i \"{m.Path}\" -vf \"{vf}\" -an -c:v libx264 -preset medium \"{c}\"");
-                else Ffmpeg($"-y -ss {F(m.TrimIn)} -i \"{m.Path}\" -t {F(m.Duration)} -vf \"{vf}\" -an -c:v libx264 -preset medium \"{c}\"");
-                clips.Add(c);
+                if (m.Type == "Foto")
+                    inputs.Append($" -loop 1 -t {F(m.Duration)} -i \"{m.Path}\"");
+                else
+                    inputs.Append($" -ss {F(m.TrimIn)} -t {F(m.Duration)} -i \"{m.Path}\"");
+
+                filters.Append($"[{i}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,fps=30,format=yuv420p,setpts=PTS-STARTPTS[v{i}];");
+                concatInputs.Append($"[v{i}]");
+                i++;
             }
-            var list = Path.Combine(dir, "list.txt"); File.WriteAllLines(list, clips.Select(x => "file '" + x.Replace("'", "'\\''") + "'"), new UTF8Encoding(false));
-            var joined = Path.Combine(dir, "joined.mp4"); Ffmpeg($"-y -f concat -safe 0 -i \"{list}\" -c copy \"{joined}\"");
-            if (music == null) File.Copy(joined, dest, true); else Ffmpeg($"-y -i \"{joined}\" -stream_loop -1 -i \"{music}\" -map 0:v -map 1:a -c:v copy -c:a aac -b:a 256k -shortest \"{dest}\"");
+            filters.Append($"{concatInputs}concat=n={Media.Count}:v=1:a=0[outv]");
+
+            var musicIndex = Media.Count;
+            var audioInput = music == null ? "" : $" -stream_loop -1 -i \"{music}\"";
+            var audioMap = music == null ? " -an" : $" -map {musicIndex}:a -c:a aac -b:a 256k -shortest";
+            Ffmpeg($"-y{inputs}{audioInput} -filter_complex \"{filters}\" -map \"[outv]\"{audioMap} -c:v h264_nvenc -preset p4 -cq 19 -b:v 0 -movflags +faststart \"{dest}\"");
         }
         finally { try { Directory.Delete(dir, true); } catch { } }
     }
