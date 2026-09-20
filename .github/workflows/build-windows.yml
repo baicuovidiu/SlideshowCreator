@@ -22,6 +22,12 @@ jobs:
         run: |
           dotnet restore .\src\SlideshowCreator\SlideshowCreator.csproj
           dotnet build .\src\SlideshowCreator\SlideshowCreator.csproj -c Release --no-restore
+      - name: Compile native D3D12 core
+        shell: pwsh
+        run: |
+          cmake -S .\\src\\Motor2.Native -B .\\artifacts\\motor2-native -A x64
+          cmake --build .\\artifacts\\motor2-native --config Release
+
       - name: Architecture guard
         shell: pwsh
         run: |
