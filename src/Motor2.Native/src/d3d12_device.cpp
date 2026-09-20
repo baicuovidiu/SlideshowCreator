@@ -317,21 +317,23 @@ struct NativeNvencSession {
 static GUID Motor2H264Preset(){ return NV_ENC_PRESET_P4_GUID; }
 #endif
 
+static thread_local int g_motor2NvencOpenStatus=0;
+MOTOR2_API int motor2_nvenc_get_last_open_status(){return g_motor2NvencOpenStatus;}
 MOTOR2_API void* motor2_nvenc_open_d3d12(void* d3d12Context,const Motor2NvencSessionSettings* settings){
 #ifndef MOTOR2_HAS_NVENC_SDK
     (void)d3d12Context;(void)settings; return nullptr;
 #else
-    auto* d3d=static_cast<NativeContext*>(d3d12Context); if(!d3d||!settings||!settings->width||!settings->height)return nullptr;
-    HMODULE dll=LoadLibraryW(L"nvEncodeAPI64.dll"); if(!dll)return nullptr;
+    g_motor2NvencOpenStatus=0; auto* d3d=static_cast<NativeContext*>(d3d12Context); if(!d3d||!settings||!settings->width||!settings->height){g_motor2NvencOpenStatus=-1001;return nullptr;}
+    HMODULE dll=LoadLibraryW(L"nvEncodeAPI64.dll"); if(!dll){g_motor2NvencOpenStatus=-1002;return nullptr;}
     using CreateFn=NVENCSTATUS (NVENCAPI*)(NV_ENCODE_API_FUNCTION_LIST*);
-    auto create=reinterpret_cast<CreateFn>(GetProcAddress(dll,"NvEncodeAPICreateInstance")); if(!create){FreeLibrary(dll);return nullptr;}
+    auto create=reinterpret_cast<CreateFn>(GetProcAddress(dll,"NvEncodeAPICreateInstance")); if(!create){g_motor2NvencOpenStatus=-1003;FreeLibrary(dll);return nullptr;}
     auto* s=new NativeNvencSession(); s->d3d=d3d; s->nvencDll=dll; s->settings=*settings; s->api.version=NV_ENCODE_API_FUNCTION_LIST_VER;
-    if(create(&s->api)!=NV_ENC_SUCCESS){s->nvencDll=nullptr;delete s;FreeLibrary(dll);return nullptr;}
+    {auto st=create(&s->api);if(st!=NV_ENC_SUCCESS){g_motor2NvencOpenStatus=10000+(int)st;s->nvencDll=nullptr;delete s;FreeLibrary(dll);return nullptr;}}
     NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS op{}; op.version=NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS_VER; op.device=d3d->device.Get(); op.deviceType=NV_ENC_DEVICE_TYPE_DIRECTX; op.apiVersion=NVENCAPI_VERSION;
-    if(s->api.nvEncOpenEncodeSessionEx(&op,&s->encoder)!=NV_ENC_SUCCESS){s->nvencDll=nullptr;delete s;FreeLibrary(dll);return nullptr;}
+    {auto st=s->api.nvEncOpenEncodeSessionEx(&op,&s->encoder);if(st!=NV_ENC_SUCCESS){g_motor2NvencOpenStatus=20000+(int)st;s->nvencDll=nullptr;delete s;FreeLibrary(dll);return nullptr;}}
     NV_ENC_INITIALIZE_PARAMS ip{}; NV_ENC_CONFIG cfg{}; ip.version=NV_ENC_INITIALIZE_PARAMS_VER; cfg.version=NV_ENC_CONFIG_VER; ip.encodeGUID=NV_ENC_CODEC_H264_GUID; ip.presetGUID=Motor2H264Preset(); ip.encodeWidth=settings->width; ip.encodeHeight=settings->height; ip.darWidth=settings->width; ip.darHeight=settings->height; ip.frameRateNum=settings->fpsNum; ip.frameRateDen=settings->fpsDen?settings->fpsDen:1; ip.enablePTD=1; ip.encodeConfig=&cfg;
     NV_ENC_PRESET_CONFIG pc{}; pc.version=NV_ENC_PRESET_CONFIG_VER; pc.presetCfg.version=NV_ENC_CONFIG_VER;
-    if(s->api.nvEncGetEncodePresetConfigEx(s->encoder,ip.encodeGUID,ip.presetGUID,NV_ENC_TUNING_INFO_HIGH_QUALITY,&pc)!=NV_ENC_SUCCESS){s->api.nvEncDestroyEncoder(s->encoder);s->nvencDll=nullptr;delete s;FreeLibrary(dll);return nullptr;}
+    {auto st=s->api.nvEncGetEncodePresetConfigEx(s->encoder,ip.encodeGUID,ip.presetGUID,NV_ENC_TUNING_INFO_HIGH_QUALITY,&pc);if(st!=NV_ENC_SUCCESS){g_motor2NvencOpenStatus=30000+(int)st;s->api.nvEncDestroyEncoder(s->encoder);s->nvencDll=nullptr;delete s;FreeLibrary(dll);return nullptr;}}
     cfg=pc.presetCfg;
     // Motor2 correctness baseline: deterministic one-input/one-output behavior.
     // NVIDIA documents that lookahead/B-frame reordering can return NEED_MORE_INPUT.
@@ -344,8 +346,8 @@ MOTOR2_API void* motor2_nvenc_open_d3d12(void* d3d12Context,const Motor2NvencSes
     cfg.rcParams.averageBitRate=settings->bitrate;
     cfg.rcParams.maxBitRate=settings->bitrate+settings->bitrate/2;
     ip.tuningInfo=NV_ENC_TUNING_INFO_HIGH_QUALITY;
-    if(s->api.nvEncInitializeEncoder(s->encoder,&ip)!=NV_ENC_SUCCESS){s->api.nvEncDestroyEncoder(s->encoder);delete s;FreeLibrary(dll);return nullptr;}
-    return s;
+    {auto st=s->api.nvEncInitializeEncoder(s->encoder,&ip);if(st!=NV_ENC_SUCCESS){g_motor2NvencOpenStatus=40000+(int)st;s->api.nvEncDestroyEncoder(s->encoder);s->nvencDll=nullptr;delete s;FreeLibrary(dll);return nullptr;}}
+    g_motor2NvencOpenStatus=1; return s;
 #endif
 }
 MOTOR2_API int motor2_nvenc_submit(void* session,void* renderTarget,std::int64_t pts100ns,std::uint64_t* submissionId){
