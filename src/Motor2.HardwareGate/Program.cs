@@ -38,7 +38,7 @@ try
     await encoder.InitializeAsync(size,30,caps,CancellationToken.None);
 
     const int frames=90;
-    long totalBytes=0; byte[]? first=null;
+    long totalBytes=0; byte[]? first=null; int completedPackets=0;
     for(int i=0;i<frames;i++)
     {
         var t=TimeSpan.FromSeconds(i/30.0);
@@ -48,11 +48,12 @@ try
         try {
             await encoder.EncodeAsync(frame,TimeSpan.FromSeconds(i/30.0),CancellationToken.None);
             await encoder.WaitForFrameCompletionAsync(frame,CancellationToken.None);
+            foreach(var packet in nativeSession.TakeCompletedBitstreams()){ completedPackets++; totalBytes+=packet.Length; first??=packet; }
         } finally { await compositor.ReleaseComposedFrameAsync(frame,CancellationToken.None); }
     }
     await encoder.FinalizeAsync(CancellationToken.None);
-    foreach(var b in nativeSession.CompletedBitstreams.Values){totalBytes+=b.Length;first??=b;}
-    if(nativeSession.CompletedBitstreams.Count!=frames)Fail($"Expected {frames} completed bitstreams, got {nativeSession.CompletedBitstreams.Count}.");
+    foreach(var packet in nativeSession.TakeCompletedBitstreams()){ completedPackets++; totalBytes+=packet.Length; first??=packet; }
+    if(completedPackets!=frames)Fail($"Expected {frames} completed bitstreams, got {completedPackets}.");
     if(totalBytes<=0||first is null)Fail("NVENC produced no H.264 bytes.");
     bool annexB=first.AsSpan().IndexOf(new byte[]{0,0,1})>=0;
     if(!annexB)Fail("H.264 Annex-B start code not found.");
