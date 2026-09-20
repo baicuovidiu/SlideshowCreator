@@ -3,7 +3,7 @@ name: Motor 2.0 Compile Gate
 on:
   workflow_dispatch:
   push:
-    branches: [ motor-2.0 ]
+    branches: [ 'motor-2.0' ]
 
 permissions:
   contents: read
@@ -29,3 +29,5 @@ jobs:
           if (-not $m2) { throw 'Motor2 sources missing.' }
           $bad = $m2 | Select-String -Pattern 'xfade|visual_raw|visual_polished|temporary MP4' -SimpleMatch
           if ($bad) { throw 'Legacy render pattern leaked into Motor2.' }
+
+# compile-gate-touch: 2026-09-20
