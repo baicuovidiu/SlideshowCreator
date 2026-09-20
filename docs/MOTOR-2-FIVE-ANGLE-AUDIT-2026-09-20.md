@@ -37,3 +37,38 @@ P0-E define delayed-output/EOS semantics before pipelining.
 Then real media/color/CONTAIN, 10/50/120+ stress, mixed media/audio, performance tuning.
 
 No milestone is validated while an applicable P0 remains open.
+
+
+## Re-audit after real RTX 4060 FAIL — 2026-09-20
+
+### Angle 1 — Build / package / provenance
+PASS: ONE-EXE runtime payload probe executes the exact launcher path in CI; native DLL and child EXE are asserted.
+FIXED: release tag was static and could make later binaries appear to belong to an older commit. Release tag is now derived from GITHUB_RUN_NUMBER.
+FIXED: nv-codec-headers previously followed upstream HEAD; pinned to eddcea9e27f6b772057c9b3f87de2cc1737faffc for reproducible ABI builds.
+OPEN: CI cannot prove NVIDIA hardware runtime.
+
+### Angle 2 — D3D12 / GPU ownership
+PASS: real laptop proved adapter discovery and D3D12 capability.
+PASS by inspection: composed target is released only after encoder completion on successful submitted frames.
+OPEN: cancellation/device-removal/DRED recovery remains unproven; current WaitForGpu path is correctness-first and serial.
+
+### Angle 3 — NVENC
+REAL FAIL: RTX 4060 reports NVENC capability but session open fails.
+FIXED DIAGNOSTICS: native layer now preserves stage/status for API create, open session, preset query, and initialize encoder; managed layer surfaces it.
+OPEN/P0: root cause cannot be selected honestly until the instrumented RTX run returns stage/status.
+PASS by inspection: incremental packet consumption prevents completed managed bitstreams from growing without bound in Hardware Gate.
+OPEN: production packet sink/muxer and full delayed-output queue remain future product work; zero-reorder baseline intentionally rejects unexpected NEED_MORE_INPUT.
+
+### Angle 4 — Failure / diagnostics / UX
+PASS: user-visible FAIL persisted to Desktop on real laptop.
+PASS: result-save fallback exists.
+PASS: launcher temp extraction cleanup exists.
+OPEN: native submit/wait paths still collapse several post-open NVENC failures to generic E_FAIL; expand diagnostics before product export gate.
+
+### Angle 5 — Product / image-quality / scale
+NOT YET TESTED: Hardware Gate still uses empty scenes; it does not validate ARW decode, EXIF, CONTAIN, OCIO/ACES, CARUSEL/WALL, audio, trim, or mixed media.
+NOT YET PERFORMANCE VALIDATED: 900-frame gate is plumbing stress, not representative slideshow throughput.
+RULE: do not infer product readiness from Hardware Gate PASS.
+
+### Audit of the audit
+Cross-check result: the previous audit correctly kept RTX runtime as a separate P0, and the real laptop test exposed exactly that class of false-green risk. New blind spots found: mutable release provenance and unpinned NVENC headers; both repaired. No evidence currently justifies changing encoder architecture merely to obtain PASS. The next decisive datum is the instrumented RTX stage/status.
