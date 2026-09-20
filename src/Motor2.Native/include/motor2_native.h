@@ -30,6 +30,8 @@ struct Motor2DrawQuad {
 };
 
 MOTOR2_API void* motor2_d3d12_create_render_target(void* context, std::uint32_t width, std::uint32_t height);
+MOTOR2_API void* motor2_d3d12_create_nvenc_bgra_target(void* context, std::uint32_t width, std::uint32_t height);
+MOTOR2_API int motor2_d3d12_convert_fp16_to_bgra8(void* context, void* fp16Target, void* bgraTarget);
 MOTOR2_API int motor2_d3d12_begin_frame(void* context, void* target);
 MOTOR2_API int motor2_d3d12_draw_quads(void* context, void* target, const Motor2DrawQuad* commands, std::uint32_t count);
 MOTOR2_API int motor2_d3d12_end_frame(void* context, void* target);
