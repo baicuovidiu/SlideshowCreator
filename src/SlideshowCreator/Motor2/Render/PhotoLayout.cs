@@ -15,6 +15,16 @@ public static class PhotoLayout
         return sourcePixels*pixelTransform*toNdc;
     }
 
+    public static void ValidateConvention()
+    {
+        var output=new PixelSize(1920,1080); var source=new PixelSize(1920,1080);
+        var identity=PixelToNdc(Matrix3x2.Identity,source,output);
+        // A full-size source at pixel origin must map source-pixel coordinates to the complete NDC viewport.
+        var topLeft=Vector2.Transform(new Vector2(-1,-1),identity); var bottomRight=Vector2.Transform(new Vector2(1,1),identity);
+        if(MathF.Abs(topLeft.X+1)>.001f||MathF.Abs(topLeft.Y-1)>.001f||MathF.Abs(bottomRight.X-1)>.001f||MathF.Abs(bottomRight.Y+1)>.001f)
+            throw new InvalidOperationException("Pixel-to-NDC transform convention failed.");
+    }
+
     /// <summary>Returns a centered CONTAIN transform. It never crops or changes aspect ratio.</summary>
     public static Matrix3x2 Contain(PixelSize source,PixelSize viewport)
     {
