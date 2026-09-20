@@ -37,5 +37,5 @@ public sealed class NativeNvencSession : INvencNativeSession
     }
     public ValueTask DrainAsync(CancellationToken ct){ct.ThrowIfCancellationRequested();var hr=Motor2Native.NvencDrain(_session);if(hr<0)Marshal.ThrowExceptionForHR(hr);return ValueTask.CompletedTask;}
     public IReadOnlyDictionary<ulong,byte[]> CompletedBitstreams=>_bitstreams;
-    public ValueTask DisposeAsync(){foreach(var t in _convertedTargets.Values)Motor2Native.ReleaseRenderTarget(_device.NativeContextForInterop,t);_convertedTargets.Clear();if(_session!=0)Motor2Native.NvencClose(_session);_session=0;return ValueTask.CompletedTask;}
+    public ValueTask DisposeAsync(){if(_session!=0)Motor2Native.NvencClose(_session);_session=0;foreach(var t in _convertedTargets.Values)Motor2Native.ReleaseRenderTarget(_device.NativeContextForInterop,t);_convertedTargets.Clear();return ValueTask.CompletedTask;}
 }
