@@ -32,6 +32,8 @@ struct NativeContext {
     HANDLE fenceEvent = nullptr;
     ComPtr<ID3D12RootSignature> rootSignature;
     ComPtr<ID3D12PipelineState> pipelineState;
+    ComPtr<ID3D12RootSignature> convertRootSignature;
+    ComPtr<ID3D12PipelineState> convertPipelineState;
     ComPtr<ID3D12DescriptorHeap> srvHeap;
     UINT srvStride = 0;
     UINT nextSrv = 0;
@@ -257,6 +259,30 @@ MOTOR2_API int motor2_d3d12_readback_rgba16f(void* context, void* target, void* 
     auto* out=static_cast<std::uint8_t*>(destination); for(UINT y=0;y<rows;++y) std::memcpy(out+static_cast<size_t>(y)*rowBytes,p+fp.Offset+static_cast<size_t>(y)*fp.Footprint.RowPitch,static_cast<size_t>(rowBytes)); D3D12_RANGE wr{0,0}; rb->Unmap(0,&wr); return S_OK;
 }
 
+
+static HRESULT EnsureConvertPipeline(NativeContext* ctx){
+    if(ctx->convertPipelineState)return S_OK;
+    const char* sh=R"(
+Texture2D<float4> src:register(t0); SamplerState smp:register(s0);
+struct O{float4 p:SV_POSITION;float2 uv:TEXCOORD0;};
+O VS(uint id:SV_VertexID){float2 p[3]={{-1,-1},{-1,3},{3,-1}};float2 u[3]={{0,1},{0,-1},{2,1}};O o;o.p=float4(p[id],0,1);o.uv=u[id];return o;}
+float4 PS(O i):SV_TARGET{float3 x=max(src.Sample(smp,i.uv).rgb,0);float3 s=select(x<=0.0031308,12.92*x,1.055*pow(x,1.0/2.4)-0.055);return float4(s.b,s.g,s.r,1);}
+)";
+    ComPtr<ID3DBlob> vs,ps,e;HRESULT hr=D3DCompile(sh,strlen(sh),nullptr,nullptr,nullptr,"VS","vs_5_1",0,0,&vs,&e);if(FAILED(hr))return hr;hr=D3DCompile(sh,strlen(sh),nullptr,nullptr,nullptr,"PS","ps_5_1",0,0,&ps,&e);if(FAILED(hr))return hr;
+    D3D12_DESCRIPTOR_RANGE rg{};rg.RangeType=D3D12_DESCRIPTOR_RANGE_TYPE_SRV;rg.NumDescriptors=1;rg.BaseShaderRegister=0;D3D12_ROOT_PARAMETER rp{};rp.ParameterType=D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;rp.DescriptorTable.NumDescriptorRanges=1;rp.DescriptorTable.pDescriptorRanges=&rg;rp.ShaderVisibility=D3D12_SHADER_VISIBILITY_PIXEL;
+    D3D12_STATIC_SAMPLER_DESC sm{};sm.Filter=D3D12_FILTER_MIN_MAG_MIP_LINEAR;sm.AddressU=sm.AddressV=sm.AddressW=D3D12_TEXTURE_ADDRESS_MODE_CLAMP;sm.ShaderVisibility=D3D12_SHADER_VISIBILITY_PIXEL;D3D12_ROOT_SIGNATURE_DESC rs{};rs.NumParameters=1;rs.pParameters=&rp;rs.NumStaticSamplers=1;rs.pStaticSamplers=&sm;
+    ComPtr<ID3DBlob> sig;hr=D3D12SerializeRootSignature(&rs,D3D_ROOT_SIGNATURE_VERSION_1,&sig,&e);if(FAILED(hr))return hr;hr=ctx->device->CreateRootSignature(0,sig->GetBufferPointer(),sig->GetBufferSize(),IID_PPV_ARGS(&ctx->convertRootSignature));if(FAILED(hr))return hr;
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC p{};p.pRootSignature=ctx->convertRootSignature.Get();p.VS={vs->GetBufferPointer(),vs->GetBufferSize()};p.PS={ps->GetBufferPointer(),ps->GetBufferSize()};p.BlendState.RenderTarget[0].RenderTargetWriteMask=D3D12_COLOR_WRITE_ENABLE_ALL;p.SampleMask=UINT_MAX;p.RasterizerState.FillMode=D3D12_FILL_MODE_SOLID;p.RasterizerState.CullMode=D3D12_CULL_MODE_NONE;p.RasterizerState.DepthClipEnable=TRUE;p.DepthStencilState.DepthEnable=FALSE;p.PrimitiveTopologyType=D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;p.NumRenderTargets=1;p.RTVFormats[0]=DXGI_FORMAT_B8G8R8A8_UNORM;p.SampleDesc.Count=1;return ctx->device->CreateGraphicsPipelineState(&p,IID_PPV_ARGS(&ctx->convertPipelineState));
+}
+MOTOR2_API void* motor2_d3d12_create_nvenc_bgra_target(void* context,std::uint32_t width,std::uint32_t height){
+    auto* ctx=static_cast<NativeContext*>(context);if(!ctx||!width||!height)return nullptr;auto* t=new NativeRenderTarget();t->width=width;t->height=height;D3D12_HEAP_PROPERTIES hp{};hp.Type=D3D12_HEAP_TYPE_DEFAULT;D3D12_RESOURCE_DESC d{};d.Dimension=D3D12_RESOURCE_DIMENSION_TEXTURE2D;d.Width=width;d.Height=height;d.DepthOrArraySize=1;d.MipLevels=1;d.Format=DXGI_FORMAT_B8G8R8A8_UNORM;d.SampleDesc.Count=1;d.Flags=D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;if(FAILED(ctx->device->CreateCommittedResource(&hp,D3D12_HEAP_FLAG_NONE,&d,D3D12_RESOURCE_STATE_RENDER_TARGET,nullptr,IID_PPV_ARGS(&t->resource)))){delete t;return nullptr;}D3D12_DESCRIPTOR_HEAP_DESC rh{};rh.Type=D3D12_DESCRIPTOR_HEAP_TYPE_RTV;rh.NumDescriptors=1;if(FAILED(ctx->device->CreateDescriptorHeap(&rh,IID_PPV_ARGS(&t->rtvHeap)))){delete t;return nullptr;}ctx->device->CreateRenderTargetView(t->resource.Get(),nullptr,t->rtvHeap->GetCPUDescriptorHandleForHeapStart());return t;
+}
+MOTOR2_API int motor2_d3d12_convert_fp16_to_bgra8(void* context,void* fp16Target,void* bgraTarget){
+    auto* ctx=static_cast<NativeContext*>(context);auto* s=static_cast<NativeRenderTarget*>(fp16Target);auto* d=static_cast<NativeRenderTarget*>(bgraTarget);if(!ctx||!s||!d)return E_INVALIDARG;HRESULT hr=EnsureConvertPipeline(ctx);if(FAILED(hr))return hr;
+    D3D12_DESCRIPTOR_HEAP_DESC hd{};hd.Type=D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;hd.NumDescriptors=1;hd.Flags=D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;ComPtr<ID3D12DescriptorHeap> heap;if(FAILED(hr=ctx->device->CreateDescriptorHeap(&hd,IID_PPV_ARGS(&heap))))return hr;D3D12_SHADER_RESOURCE_VIEW_DESC sv{};sv.Format=DXGI_FORMAT_R16G16B16A16_FLOAT;sv.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2D;sv.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;sv.Texture2D.MipLevels=1;ctx->device->CreateShaderResourceView(s->resource.Get(),&sv,heap->GetCPUDescriptorHandleForHeapStart());
+    ComPtr<ID3D12CommandAllocator>a;ComPtr<ID3D12GraphicsCommandList>l;if(FAILED(hr=ctx->device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,IID_PPV_ARGS(&a))))return hr;if(FAILED(hr=ctx->device->CreateCommandList(0,D3D12_COMMAND_LIST_TYPE_DIRECT,a.Get(),ctx->convertPipelineState.Get(),IID_PPV_ARGS(&l))))return hr;
+    D3D12_RESOURCE_BARRIER b{};b.Type=D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;b.Transition.pResource=s->resource.Get();b.Transition.StateBefore=D3D12_RESOURCE_STATE_RENDER_TARGET;b.Transition.StateAfter=D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;b.Transition.Subresource=D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;l->ResourceBarrier(1,&b);auto rtv=d->rtvHeap->GetCPUDescriptorHandleForHeapStart();l->OMSetRenderTargets(1,&rtv,FALSE,nullptr);D3D12_VIEWPORT vp{0,0,(float)d->width,(float)d->height,0,1};D3D12_RECT sc{0,0,(LONG)d->width,(LONG)d->height};l->RSSetViewports(1,&vp);l->RSSetScissorRects(1,&sc);l->SetGraphicsRootSignature(ctx->convertRootSignature.Get());ID3D12DescriptorHeap* hs[]={heap.Get()};l->SetDescriptorHeaps(1,hs);l->SetGraphicsRootDescriptorTable(0,heap->GetGPUDescriptorHandleForHeapStart());l->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);l->DrawInstanced(3,1,0,0);std::swap(b.Transition.StateBefore,b.Transition.StateAfter);l->ResourceBarrier(1,&b);if(FAILED(hr=l->Close()))return hr;ID3D12CommandList* ls[]={l.Get()};ctx->directQueue->ExecuteCommandLists(1,ls);WaitForGpu(ctx);return S_OK;
+}
 MOTOR2_API int motor2_nvenc_probe(Motor2NvencProbeInfo* info) {
     if(!info) return E_POINTER;
     info->apiVersion = 0; info->maxSupportedVersion = 0;
