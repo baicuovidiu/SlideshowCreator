@@ -38,7 +38,14 @@ public sealed class PipelinedRenderScheduler : IRenderScheduler
                 composed=await _graphics.ComposeAsync(plan,textures,ct);
             using(_telemetry.Measure("encode.submit"))
                 await _encoder.EncodeAsync(composed,pts,ct);
+            // A compositor-owned render target cannot be recycled/released until the encoder
+            // proves it has finished consuming that exact GPU surface.
+            if(_encoder is IGpuFrameCompletionSource completion)
+                await completion.WaitForFrameCompletionAsync(composed,ct);
+            if(_graphics is D3D12Compositor compositor)
+                await compositor.ReleaseComposedFrameAsync(composed,ct);
             _telemetry.Counter("render.frame",1);
+            await _gpu.TrimAsync(ct);
         }
         await _encoder.FinalizeAsync(ct);
     }
