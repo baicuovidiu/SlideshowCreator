@@ -13,6 +13,7 @@ using Microsoft::WRL::ComPtr;
 
 struct NativeRenderTarget {
     ComPtr<ID3D12Resource> resource;
+    ComPtr<ID3D12DescriptorHeap> rtvHeap;
 };
 
 struct NativeContext {
@@ -26,7 +27,6 @@ struct NativeContext {
     HANDLE fenceEvent = nullptr;
     ComPtr<ID3D12RootSignature> rootSignature;
     ComPtr<ID3D12PipelineState> pipelineState;
-    ComPtr<ID3D12DescriptorHeap> rtvHeap;
     ComPtr<ID3D12DescriptorHeap> srvHeap;
     UINT srvStride = 0;
     UINT nextSrv = 0;
