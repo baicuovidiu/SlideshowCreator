@@ -38,7 +38,7 @@ public sealed class PipelinedRenderScheduler : IRenderScheduler
                 composed=await _graphics.ComposeAsync(plan,textures,ct);
             using(_telemetry.Measure("encode.submit"))
                 await _encoder.EncodeAsync(composed,pts,ct);
-            _telemetry.Counter("render.frame",i+1);
+            _telemetry.Counter("render.frame",1);
         }
         await _encoder.FinalizeAsync(ct);
     }
