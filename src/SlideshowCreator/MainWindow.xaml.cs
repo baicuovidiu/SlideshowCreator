@@ -108,14 +108,13 @@ public partial class MainWindow : Window
         var dir = Path.Combine(Path.GetTempPath(), "SlideshowCreator", Guid.NewGuid().ToString("N")); Directory.CreateDirectory(dir);
         try
         {
+            var videoEncoder = SelectVideoEncoder(dir);
             if (Media.All(m => m.Type == "Foto"))
             {
-                ExportPhotosSinglePass(dest, dir);
+                ExportPhotosSinglePass(dest, dir, videoEncoder);
                 return;
             }
 
-            // Mixed photo/video path. It remains single-encode, but the large photo-only
-            // benchmark uses ffconcat below so 120+ paths never overflow Windows command-line limits.
             var inputs = new StringBuilder();
             var filters = new StringBuilder();
             var concatInputs = new StringBuilder();
@@ -132,12 +131,12 @@ public partial class MainWindow : Window
             var musicIndex = Media.Count;
             var audioInput = music == null ? "" : $" -stream_loop -1 -i \"{music}\"";
             var audioMap = music == null ? " -an" : $" -map {musicIndex}:a -c:a aac -b:a 256k -shortest";
-            Ffmpeg($"-y{inputs}{audioInput} -filter_complex \"{filters}\" -map \"[outv]\"{audioMap} -c:v h264_nvenc -preset p4 -cq 19 -b:v 0 -movflags +faststart \"{dest}\"");
+            Ffmpeg($"-y{inputs}{audioInput} -filter_complex \"{filters}\" -map \"[outv]\"{audioMap} {videoEncoder} -movflags +faststart \"{dest}\"");
         }
         finally { try { Directory.Delete(dir, true); } catch { } }
     }
 
-    void ExportPhotosSinglePass(string dest, string dir)
+    void ExportPhotosSinglePass(string dest, string dir, string videoEncoder)
     {
         var list = Path.Combine(dir, "photos.ffconcat");
         using (var w = new StreamWriter(list, false, new UTF8Encoding(false)))
@@ -148,13 +147,26 @@ public partial class MainWindow : Window
                 w.WriteLine("file '" + FfconcatPath(m.Path) + "'");
                 w.WriteLine("duration " + F(m.Duration));
             }
-            // concat demuxer applies the final duration only when a following file exists.
             w.WriteLine("file '" + FfconcatPath(Media[^1].Path) + "'");
         }
         var vf = "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,fps=30,format=yuv420p";
         var audioInput = music == null ? "" : $" -stream_loop -1 -i \"{music}\"";
         var audioMap = music == null ? " -an" : " -map 1:a -c:a aac -b:a 256k -shortest";
-        Ffmpeg($"-y -f concat -safe 0 -i \"{list}\"{audioInput} -map 0:v{audioMap} -vf \"{vf}\" -c:v h264_nvenc -preset p4 -cq 19 -b:v 0 -movflags +faststart \"{dest}\"");
+        Ffmpeg($"-y -f concat -safe 0 -i \"{list}\"{audioInput} -map 0:v{audioMap} -vf \"{vf}\" {videoEncoder} -movflags +faststart \"{dest}\"");
+    }
+
+    static string SelectVideoEncoder(string dir)
+    {
+        var probe = Path.Combine(dir, "nvenc-probe.mp4");
+        try
+        {
+            Run("ffmpeg.exe", $"-y -f lavfi -i color=c=black:s=64x64:r=1 -frames:v 1 -c:v h264_nvenc -preset p4 \"{probe}\"", out var code);
+            if (code == 0 && File.Exists(probe) && new FileInfo(probe).Length > 0)
+                return "-c:v h264_nvenc -preset p4 -cq 19 -b:v 0";
+        }
+        catch { }
+        finally { try { if (File.Exists(probe)) File.Delete(probe); } catch { } }
+        return "-c:v libx264 -preset fast -crf 19";
     }
 
     static string FfconcatPath(string path) => path.Replace("'", "'\\''");
@@ -165,8 +177,6 @@ public partial class MainWindow : Window
         var path = Path.Combine(AppContext.BaseDirectory, "Tools", exe); if (!File.Exists(path)) throw new FileNotFoundException("Lipsește " + exe, path);
         using var p = new Process();
         p.StartInfo = new ProcessStartInfo(path) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
-        // Avoid cmd.exe parsing and the legacy Windows command-line length ceiling.
-        // FFmpeg still receives one logical argument string, but ProcessStartInfo owns quoting.
         foreach (var arg in SplitArguments(args)) p.StartInfo.ArgumentList.Add(arg);
         var sb = new StringBuilder(); p.OutputDataReceived += (_, e) => { if (e.Data != null) lock (sb) sb.AppendLine(e.Data); }; p.ErrorDataReceived += (_, e) => { if (e.Data != null) lock (sb) sb.AppendLine(e.Data); };
         p.Start(); p.BeginOutputReadLine(); p.BeginErrorReadLine(); p.WaitForExit(); code = p.ExitCode; lock (sb) return sb.ToString();
