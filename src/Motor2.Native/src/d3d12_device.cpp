@@ -234,3 +234,21 @@ MOTOR2_API int motor2_d3d12_draw_quads(void* context, void* target, const Motor2
 MOTOR2_API int motor2_d3d12_end_frame(void* context, void* target) {
     return (context&&target) ? S_OK : E_INVALIDARG;
 }
+
+
+MOTOR2_API int motor2_d3d12_readback_rgba16f(void* context, void* target, void* destination, std::uint32_t destinationBytes) {
+    auto* ctx=static_cast<NativeContext*>(context); auto* tgt=static_cast<NativeRenderTarget*>(target);
+    if(!ctx||!tgt||!destination) return E_INVALIDARG;
+    WaitForGpu(ctx);
+    auto td=tgt->resource->GetDesc(); D3D12_PLACED_SUBRESOURCE_FOOTPRINT fp{}; UINT rows=0; UINT64 rowBytes=0,total=0;
+    ctx->device->GetCopyableFootprints(&td,0,1,0,&fp,&rows,&rowBytes,&total);
+    if(destinationBytes < rowBytes*rows) return HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);
+    D3D12_HEAP_PROPERTIES hp{}; hp.Type=D3D12_HEAP_TYPE_READBACK; D3D12_RESOURCE_DESC bd{}; bd.Dimension=D3D12_RESOURCE_DIMENSION_BUFFER; bd.Width=total; bd.Height=1; bd.DepthOrArraySize=1; bd.MipLevels=1; bd.SampleDesc.Count=1; bd.Layout=D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    ComPtr<ID3D12Resource> rb; HRESULT hr=ctx->device->CreateCommittedResource(&hp,D3D12_HEAP_FLAG_NONE,&bd,D3D12_RESOURCE_STATE_COPY_DEST,nullptr,IID_PPV_ARGS(&rb)); if(FAILED(hr)) return hr;
+    ComPtr<ID3D12CommandAllocator> a; ComPtr<ID3D12GraphicsCommandList> l; if(FAILED(hr=ctx->device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,IID_PPV_ARGS(&a)))) return hr; if(FAILED(hr=ctx->device->CreateCommandList(0,D3D12_COMMAND_LIST_TYPE_DIRECT,a.Get(),nullptr,IID_PPV_ARGS(&l)))) return hr;
+    D3D12_RESOURCE_BARRIER b{}; b.Type=D3D12_RESOURCE_BARRIER_TYPE_TRANSITION; b.Transition.pResource=tgt->resource.Get(); b.Transition.StateBefore=D3D12_RESOURCE_STATE_RENDER_TARGET; b.Transition.StateAfter=D3D12_RESOURCE_STATE_COPY_SOURCE; b.Transition.Subresource=D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES; l->ResourceBarrier(1,&b);
+    D3D12_TEXTURE_COPY_LOCATION s{}; s.pResource=tgt->resource.Get(); s.Type=D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX; D3D12_TEXTURE_COPY_LOCATION d{}; d.pResource=rb.Get(); d.Type=D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT; d.PlacedFootprint=fp; l->CopyTextureRegion(&d,0,0,0,&s,nullptr);
+    std::swap(b.Transition.StateBefore,b.Transition.StateAfter); l->ResourceBarrier(1,&b); if(FAILED(hr=l->Close())) return hr; ID3D12CommandList* lists[]={l.Get()}; ctx->directQueue->ExecuteCommandLists(1,lists); WaitForGpu(ctx);
+    std::uint8_t* p=nullptr; D3D12_RANGE rr{static_cast<SIZE_T>(fp.Offset),static_cast<SIZE_T>(fp.Offset+total)}; if(FAILED(hr=rb->Map(0,&rr,reinterpret_cast<void**>(&p)))) return hr;
+    auto* out=static_cast<std::uint8_t*>(destination); for(UINT y=0;y<rows;++y) std::memcpy(out+static_cast<size_t>(y)*rowBytes,p+fp.Offset+static_cast<size_t>(y)*fp.Footprint.RowPitch,static_cast<size_t>(rowBytes)); D3D12_RANGE wr{0,0}; rb->Unmap(0,&wr); return S_OK;
+}
