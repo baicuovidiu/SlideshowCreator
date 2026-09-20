@@ -27,7 +27,7 @@ public sealed class D3D12Compositor : IGraphicsBackend
     private readonly ID3D12CompositorDevice _device;
     private readonly IGpuResourceCache _textures;
     private readonly IDecodeService _decode;
-    private PixelSize _size;
+    private PixelSize _size = new(1, 1);
 
     public D3D12Compositor(ID3D12CompositorDevice device,IGpuResourceCache textures,IDecodeService decode)
         =>(_device,_textures,_decode)=(device,textures,decode);
