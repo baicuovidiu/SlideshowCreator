@@ -17,11 +17,53 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+      - name: Acquire pinned FFmpeg for salvage app
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $version='8.1.2'
+          $zip="$pwd\artifacts\ffmpeg-$version-essentials_build.zip"
+          $shaFile="$zip.sha256"
+          New-Item -ItemType Directory -Force -Path "$pwd\artifacts" | Out-Null
+          Invoke-WebRequest "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-$version-essentials_build.zip" -OutFile $zip
+          Invoke-WebRequest "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-$version-essentials_build.zip.sha256" -OutFile $shaFile
+          $expected=((Get-Content $shaFile -Raw).Trim() -split '\s+')[0].ToLowerInvariant()
+          $actual=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "FAIL: FFmpeg checksum mismatch expected=$expected actual=$actual" }
+          Expand-Archive $zip -DestinationPath "$pwd\artifacts\ffmpeg" -Force
+          $bin=Get-ChildItem "$pwd\artifacts\ffmpeg" -Directory | Select-Object -First 1 | ForEach-Object { Join-Path $_.FullName 'bin' }
+          if (-not (Test-Path "$bin\ffmpeg.exe") -or -not (Test-Path "$bin\ffprobe.exe")) { throw 'FAIL: pinned FFmpeg package incomplete' }
+          New-Item -ItemType Directory -Force -Path '.\src\SlideshowCreator\Tools' | Out-Null
+          Copy-Item "$bin\ffmpeg.exe" '.\src\SlideshowCreator\Tools\ffmpeg.exe' -Force
+          Copy-Item "$bin\ffprobe.exe" '.\src\SlideshowCreator\Tools\ffprobe.exe' -Force
+          & '.\src\SlideshowCreator\Tools\ffmpeg.exe' -hide_banner -encoders 2>&1 | Tee-Object -Variable enc | Out-Null
+          if (-not ($enc -match 'h264_nvenc')) { throw 'FAIL: packaged FFmpeg lacks h264_nvenc' }
+          if (-not ($enc -match 'libx264')) { throw 'FAIL: packaged FFmpeg lacks libx264 fallback' }
       - name: Compile Motor 2.0
         shell: pwsh
         run: |
           dotnet restore .\src\SlideshowCreator\SlideshowCreator.csproj
           dotnet build .\src\SlideshowCreator\SlideshowCreator.csproj -c Release --no-restore
+      - name: Publish runnable salvage application
+        shell: pwsh
+        run: |
+          dotnet publish .\src\SlideshowCreator\SlideshowCreator.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o .\artifacts\SlideshowCreator-App
+          $exe='.\artifacts\SlideshowCreator-App\SlideshowCreator.exe'
+          $ffmpeg='.\artifacts\SlideshowCreator-App\Tools\ffmpeg.exe'
+          $ffprobe='.\artifacts\SlideshowCreator-App\Tools\ffprobe.exe'
+          if (-not (Test-Path $exe)) { throw 'FAIL: SlideshowCreator.exe missing' }
+          if (-not (Test-Path $ffmpeg)) { throw 'FAIL: packaged ffmpeg.exe missing' }
+          if (-not (Test-Path $ffprobe)) { throw 'FAIL: packaged ffprobe.exe missing' }
+          & $ffmpeg -hide_banner -version
+          if ($LASTEXITCODE -ne 0) { throw 'FAIL: packaged ffmpeg.exe cannot start' }
+          & $ffprobe -hide_banner -version
+          if ($LASTEXITCODE -ne 0) { throw 'FAIL: packaged ffprobe.exe cannot start' }
+      - name: Upload runnable salvage application
+        uses: actions/upload-artifact@v4
+        with:
+          name: SlideshowCreator-App-win-x64
+          path: artifacts/SlideshowCreator-App
+          if-no-files-found: error
       - name: Acquire NVENC 13.1 headers
         shell: pwsh
         run: |
