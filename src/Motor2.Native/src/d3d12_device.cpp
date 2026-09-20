@@ -21,6 +21,10 @@ struct NativeContext {
     HANDLE fenceEvent = nullptr;
     ComPtr<ID3D12RootSignature> rootSignature;
     ComPtr<ID3D12PipelineState> pipelineState;
+    ComPtr<ID3D12DescriptorHeap> rtvHeap;
+    ComPtr<ID3D12DescriptorHeap> srvHeap;
+    UINT rtvStride = 0;
+    UINT srvStride = 0;
 };
 
 static HRESULT SelectAdapter(IDXGIFactory6* factory, IDXGIAdapter1** selected) {
@@ -68,6 +72,12 @@ MOTOR2_API void* motor2_d3d12_create() {
     if (FAILED(ctx->device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&ctx->fence)))) { delete ctx; return nullptr; }
     ctx->fenceEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (!ctx->fenceEvent) { delete ctx; return nullptr; }
+    D3D12_DESCRIPTOR_HEAP_DESC rh{}; rh.Type=D3D12_DESCRIPTOR_HEAP_TYPE_RTV; rh.NumDescriptors=1;
+    if(FAILED(ctx->device->CreateDescriptorHeap(&rh,IID_PPV_ARGS(&ctx->rtvHeap)))) { CloseHandle(ctx->fenceEvent); delete ctx; return nullptr; }
+    ctx->rtvStride=ctx->device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+    D3D12_DESCRIPTOR_HEAP_DESC sh{}; sh.Type=D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV; sh.NumDescriptors=4096; sh.Flags=D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+    if(FAILED(ctx->device->CreateDescriptorHeap(&sh,IID_PPV_ARGS(&ctx->srvHeap)))) { CloseHandle(ctx->fenceEvent); delete ctx; return nullptr; }
+    ctx->srvStride=ctx->device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
     return ctx;
 }
 
@@ -138,11 +148,14 @@ MOTOR2_API void* motor2_d3d12_create_render_target(void* context, std::uint32_t 
     D3D12_HEAP_PROPERTIES heap{}; heap.Type=D3D12_HEAP_TYPE_DEFAULT;
     D3D12_RESOURCE_DESC d{}; d.Dimension=D3D12_RESOURCE_DIMENSION_TEXTURE2D; d.Width=width; d.Height=height; d.DepthOrArraySize=1; d.MipLevels=1; d.Format=DXGI_FORMAT_R16G16B16A16_FLOAT; d.SampleDesc.Count=1; d.Layout=D3D12_TEXTURE_LAYOUT_UNKNOWN; d.Flags=D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
     D3D12_CLEAR_VALUE clear{}; clear.Format=d.Format; clear.Color[3]=1.0f;
-    if(FAILED(ctx->device->CreateCommittedResource(&heap,D3D12_HEAP_FLAG_NONE,&d,D3D12_RESOURCE_STATE_RENDER_TARGET,&clear,IID_PPV_ARGS(target->ReleaseAndGetAddressOf())))){delete target;return nullptr;} return target;
+    if(FAILED(ctx->device->CreateCommittedResource(&heap,D3D12_HEAP_FLAG_NONE,&d,D3D12_RESOURCE_STATE_RENDER_TARGET,&clear,IID_PPV_ARGS(target->ReleaseAndGetAddressOf())))){delete target;return nullptr;}
+    ctx->device->CreateRenderTargetView(target->Get(),nullptr,ctx->rtvHeap->GetCPUDescriptorHandleForHeapStart());
+    return target;
 }
 
 MOTOR2_API int motor2_d3d12_begin_frame(void* context, void* target) {
-    return (context&&target) ? S_OK : E_INVALIDARG;
+    auto* ctx=static_cast<NativeContext*>(context); if(!ctx||!target) return E_INVALIDARG;
+    return EnsureQuadPipeline(ctx);
 }
 
 MOTOR2_API int motor2_d3d12_draw_quads(void* context, void* target, const Motor2DrawQuad* commands, std::uint32_t count) {
