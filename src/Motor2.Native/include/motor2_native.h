@@ -22,6 +22,7 @@ MOTOR2_API void motor2_d3d12_release_resource(void* resource);
 
 struct Motor2DrawQuad {
     void* texture;
+    std::uint32_t srvIndex;
     float m11, m12, m21, m22, m31, m32;
     float opacity;
     float z;
