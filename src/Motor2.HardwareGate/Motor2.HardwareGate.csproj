@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+<PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0-windows</TargetFramework><RuntimeIdentifier>win-x64</RuntimeIdentifier><SelfContained>true</SelfContained><PublishSingleFile>false</PublishSingleFile><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><AllowUnsafeBlocks>true</AllowUnsafeBlocks></PropertyGroup>
+<ItemGroup><Compile Include="../SlideshowCreator/Motor2/**/*.cs" LinkBase="Motor2" /></ItemGroup>
+<ItemGroup><None Include="../Motor2.Native/bin/Motor2Native.dll" Condition="Exists('../Motor2.Native/bin/Motor2Native.dll')" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+</Project>
