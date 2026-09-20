@@ -11,7 +11,7 @@ public sealed class InMemoryRenderTelemetry : IRenderTelemetry
     public IReadOnlyCollection<StageSample> Samples=>_samples.ToArray();
     public IReadOnlyDictionary<string,long> Counters=>_counters;
     public IDisposable Measure(string stage, AssetId? asset=null)=>new Scope(stage,asset?.Value,_samples);
-    public void Counter(string name,long value)=>_counters[name]=value;
+    public void Counter(string name,long value)=>_counters.AddOrUpdate(name,value,(_,old)=>checked(old+value));
     private sealed class Scope(string stage,string? asset,ConcurrentQueue<StageSample> sink):IDisposable {
         private readonly Stopwatch _sw=Stopwatch.StartNew();
         public void Dispose(){_sw.Stop();sink.Enqueue(new(stage,asset,_sw.Elapsed.TotalMilliseconds));}
