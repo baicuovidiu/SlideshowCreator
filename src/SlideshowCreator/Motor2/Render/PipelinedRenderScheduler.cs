@@ -26,16 +26,16 @@ public sealed class PipelinedRenderScheduler : IRenderScheduler
             ct.ThrowIfCancellationRequested();
             var pts=TimeSpan.FromSeconds(i/fps);
             var plan=_planner.Plan(scene,pts,outputSize,true);
-            var surfaces=new Dictionary<AssetId,DecodedSurface>();
+            var textures=new Dictionary<AssetId,GpuTextureHandle>();
             foreach(var req in plan.RequiredAssets)
             {
                 var decoded=await _decode.DecodeAsync(req,ct);
-                await _gpu.GetOrUploadAsync(req,decoded,ct);
-                surfaces[req.Asset]=decoded;
+                var texture=await _gpu.GetOrUploadAsync(req,decoded,ct);
+                textures[req.Asset]=texture;
             }
             object composed;
             using(_telemetry.Measure("gpu.compose"))
-                composed=await _graphics.ComposeAsync(plan,surfaces,ct);
+                composed=await _graphics.ComposeAsync(plan,textures,ct);
             using(_telemetry.Measure("encode.submit"))
                 await _encoder.EncodeAsync(composed,pts,ct);
             _telemetry.Counter("render.frame",i+1);
