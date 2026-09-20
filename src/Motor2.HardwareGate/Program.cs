@@ -55,9 +55,10 @@ try
     foreach(var packet in nativeSession.TakeCompletedBitstreams()){ completedPackets++; totalBytes+=packet.Length; first??=packet; }
     if(completedPackets!=frames)Fail($"Expected {frames} completed bitstreams, got {completedPackets}.");
     if(totalBytes<=0||first is null)Fail("NVENC produced no H.264 bytes.");
-    bool annexB=first.AsSpan().IndexOf(new byte[]{0,0,1})>=0;
+    var firstPacket=first ?? throw new InvalidOperationException("NVENC first bitstream missing after validation.");
+    bool annexB=firstPacket.AsSpan().IndexOf(new byte[]{0,0,1})>=0;
     if(!annexB)Fail("H.264 Annex-B start code not found.");
-    var hash=Convert.ToHexString(SHA256.HashData(first));
+    var hash=Convert.ToHexString(SHA256.HashData(firstPacket));
     if(nativeSession.CompletedBitstreams.Count!=0)Fail($"Bitstream retention leak: {nativeSession.CompletedBitstreams.Count} packets remained after incremental consumption.");
     var details=$"Adapter={caps.AdapterName}\r\nVRAM={caps.DedicatedVideoMemoryBytes}\r\nD3D12={caps.D3D12}\r\nNVENC={caps.NvEnc}\r\nframes={frames}\r\nh264Bytes={totalBytes}\r\nfirstSHA256={hash}\r\nPipeline=D3D12 -> FP16 -> GPU BGRA -> NVENC H.264 -> completion -> release";
     SaveResult("PASS",details);
