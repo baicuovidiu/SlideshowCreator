@@ -44,6 +44,9 @@ internal static partial class Motor2Native
     [LibraryImport(LibraryName, EntryPoint = "motor2_d3d12_create_render_target")]
     internal static partial nint CreateRenderTarget(nint context, uint width, uint height);
 
+    [LibraryImport(LibraryName, EntryPoint="motor2_d3d12_create_nvenc_bgra_target")] internal static partial nint CreateNvencBgraTarget(nint context,uint width,uint height);
+    [LibraryImport(LibraryName, EntryPoint="motor2_d3d12_convert_fp16_to_bgra8")] internal static partial int ConvertFp16ToBgra8(nint context,nint fp16Target,nint bgraTarget);
+
     [LibraryImport(LibraryName, EntryPoint = "motor2_d3d12_begin_frame")]
     internal static partial int BeginFrame(nint context, nint target);
 
