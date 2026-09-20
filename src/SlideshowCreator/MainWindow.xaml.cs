@@ -163,9 +163,32 @@ public partial class MainWindow : Window
     static string Run(string exe, string args, out int code)
     {
         var path = Path.Combine(AppContext.BaseDirectory, "Tools", exe); if (!File.Exists(path)) throw new FileNotFoundException("Lipsește " + exe, path);
-        using var p = new Process(); p.StartInfo = new ProcessStartInfo(path, args) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        using var p = new Process();
+        p.StartInfo = new ProcessStartInfo(path) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        // Avoid cmd.exe parsing and the legacy Windows command-line length ceiling.
+        // FFmpeg still receives one logical argument string, but ProcessStartInfo owns quoting.
+        foreach (var arg in SplitArguments(args)) p.StartInfo.ArgumentList.Add(arg);
         var sb = new StringBuilder(); p.OutputDataReceived += (_, e) => { if (e.Data != null) lock (sb) sb.AppendLine(e.Data); }; p.ErrorDataReceived += (_, e) => { if (e.Data != null) lock (sb) sb.AppendLine(e.Data); };
         p.Start(); p.BeginOutputReadLine(); p.BeginErrorReadLine(); p.WaitForExit(); code = p.ExitCode; lock (sb) return sb.ToString();
+    }
+
+    static IEnumerable<string> SplitArguments(string commandLine)
+    {
+        var current = new StringBuilder();
+        bool quoted = false;
+        for (int i = 0; i < commandLine.Length; i++)
+        {
+            var ch = commandLine[i];
+            if (ch == '"') { quoted = !quoted; continue; }
+            if (char.IsWhiteSpace(ch) && !quoted)
+            {
+                if (current.Length > 0) { yield return current.ToString(); current.Clear(); }
+                continue;
+            }
+            current.Append(ch);
+        }
+        if (quoted) throw new ArgumentException("Linie FFmpeg cu ghilimele neînchise.");
+        if (current.Length > 0) yield return current.ToString();
     }
 
     void Window_PreviewDragOver(object sender, DragEventArgs e) { e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None; e.Handled = true; }
