@@ -41,10 +41,21 @@ jobs:
           dotnet restore .\src\Motor2.HardwareGate\Motor2.HardwareGate.csproj
           dotnet build .\src\Motor2.HardwareGate\Motor2.HardwareGate.csproj -c Release --no-restore
 
-      - name: Publish self-contained hardware gate
+      - name: Publish and VERIFY complete self-contained hardware gate
         shell: pwsh
         run: |
-          dotnet publish .\src\Motor2.HardwareGate\Motor2.HardwareGate.csproj -c Release -r win-x64 --self-contained true -o .\artifacts\Motor2-HardwareGate
+          dotnet publish .\src\Motor2.HardwareGate\Motor2.HardwareGate.csproj -c Release -r win-x64 --self-contained true -p:UseAppHost=true -o .\artifacts\Motor2-HardwareGate
+          Copy-Item '.\artifacts\motor2-native\Release\Motor2Native.dll' '.\artifacts\Motor2-HardwareGate\Motor2Native.dll' -Force
+          $exe='.\artifacts\Motor2-HardwareGate\Motor2.HardwareGate.exe'
+          $native='.\artifacts\Motor2-HardwareGate\Motor2Native.dll'
+          if (-not (Test-Path $exe)) { throw 'FAIL: Motor2.HardwareGate.exe missing from deliverable' }
+          if (-not (Test-Path $native)) { throw 'FAIL: Motor2Native.dll missing from deliverable' }
+          Write-Host 'DELIVERABLE CONTENTS:'
+          Get-ChildItem '.\artifacts\Motor2-HardwareGate' | Select-Object Name,Length
+          Write-Host 'EXE SHA256:'
+          Get-FileHash $exe -Algorithm SHA256
+          Write-Host 'NATIVE SHA256:'
+          Get-FileHash $native -Algorithm SHA256
 
       - name: Upload hardware gate managed package
         uses: actions/upload-artifact@v4
