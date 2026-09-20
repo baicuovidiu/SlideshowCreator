@@ -332,7 +332,18 @@ MOTOR2_API void* motor2_nvenc_open_d3d12(void* d3d12Context,const Motor2NvencSes
     NV_ENC_INITIALIZE_PARAMS ip{}; NV_ENC_CONFIG cfg{}; ip.version=NV_ENC_INITIALIZE_PARAMS_VER; cfg.version=NV_ENC_CONFIG_VER; ip.encodeGUID=NV_ENC_CODEC_H264_GUID; ip.presetGUID=Motor2H264Preset(); ip.encodeWidth=settings->width; ip.encodeHeight=settings->height; ip.darWidth=settings->width; ip.darHeight=settings->height; ip.frameRateNum=settings->fpsNum; ip.frameRateDen=settings->fpsDen?settings->fpsDen:1; ip.enablePTD=1; ip.encodeConfig=&cfg;
     NV_ENC_PRESET_CONFIG pc{}; pc.version=NV_ENC_PRESET_CONFIG_VER; pc.presetCfg.version=NV_ENC_CONFIG_VER;
     if(s->api.nvEncGetEncodePresetConfigEx(s->encoder,ip.encodeGUID,ip.presetGUID,NV_ENC_TUNING_INFO_HIGH_QUALITY,&pc)!=NV_ENC_SUCCESS){s->api.nvEncDestroyEncoder(s->encoder);s->nvencDll=nullptr;delete s;FreeLibrary(dll);return nullptr;}
-    cfg=pc.presetCfg; cfg.rcParams.rateControlMode=NV_ENC_PARAMS_RC_VBR; cfg.rcParams.averageBitRate=settings->bitrate; cfg.rcParams.maxBitRate=settings->bitrate+settings->bitrate/2; ip.tuningInfo=NV_ENC_TUNING_INFO_HIGH_QUALITY;
+    cfg=pc.presetCfg;
+    // Motor2 correctness baseline: deterministic one-input/one-output behavior.
+    // NVIDIA documents that lookahead/B-frame reordering can return NEED_MORE_INPUT.
+    // Disable both until the asynchronous output queue is implemented and hardware-proven.
+    cfg.frameIntervalP=1;
+    cfg.rcParams.enableLookahead=0;
+    cfg.rcParams.lookaheadDepth=0;
+    cfg.rcParams.disableBadapt=1;
+    cfg.rcParams.rateControlMode=NV_ENC_PARAMS_RC_VBR;
+    cfg.rcParams.averageBitRate=settings->bitrate;
+    cfg.rcParams.maxBitRate=settings->bitrate+settings->bitrate/2;
+    ip.tuningInfo=NV_ENC_TUNING_INFO_HIGH_QUALITY;
     if(s->api.nvEncInitializeEncoder(s->encoder,&ip)!=NV_ENC_SUCCESS){s->api.nvEncDestroyEncoder(s->encoder);delete s;FreeLibrary(dll);return nullptr;}
     return s;
 #endif
