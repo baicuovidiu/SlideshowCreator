@@ -3,14 +3,14 @@ using SlideshowCreator.Motor2.Core;
 using System.Security.Cryptography;
 using System.Text;
 
-static readonly string ResultPath=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),"Motor2_HardwareGate_RESULT.txt");
-static void SaveResult(string status,string details){
+string ResultPath=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),"Motor2_HardwareGate_RESULT.txt");
+void SaveResult(string status,string details){
     var body=$"Motor 2.0 Hardware Gate\r\nSTATUS: {status}\r\n{details}\r\nTime: {DateTime.Now:yyyy-MM-dd HH:mm:ss}\r\n";
     File.WriteAllText(ResultPath,body,Encoding.UTF8);
     Console.WriteLine(); Console.WriteLine(body); Console.WriteLine("Rezultatul a fost salvat pe Desktop:"); Console.WriteLine(ResultPath);
 }
-static void Pause(){Console.WriteLine();Console.WriteLine("Fa o poza acestui rezultat sau trimite fisierul Motor2_HardwareGate_RESULT.txt.");Console.WriteLine("Apasa ENTER pentru inchidere...");Console.ReadLine();}
-static void Fail(string message){SaveResult("FAIL",message);Pause();Environment.Exit(2);}
+void Pause(){Console.WriteLine();Console.WriteLine("Fa o poza acestui rezultat sau trimite fisierul Motor2_HardwareGate_RESULT.txt.");Console.WriteLine("Apasa ENTER pentru inchidere...");Console.ReadLine();}
+void Fail(string message){SaveResult("FAIL",message);Pause();Environment.Exit(2);}
 try
 {
     Console.WriteLine("Motor 2.0 NVENC Hardware Gate");
