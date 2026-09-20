@@ -16,3 +16,6 @@ struct Motor2AdapterInfo {
 MOTOR2_API int motor2_d3d12_probe(Motor2AdapterInfo* info);
 MOTOR2_API void* motor2_d3d12_create();
 MOTOR2_API void motor2_d3d12_destroy(void* context);
+MOTOR2_API void* motor2_d3d12_create_texture_rgba8(void* context, std::uint32_t width, std::uint32_t height);
+MOTOR2_API int motor2_d3d12_upload_rgba8(void* context, void* texture, const void* pixels, std::uint32_t rowPitch, std::uint32_t height);
+MOTOR2_API void motor2_d3d12_release_resource(void* resource);
