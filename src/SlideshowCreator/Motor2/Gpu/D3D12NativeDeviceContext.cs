@@ -31,18 +31,38 @@ public sealed class D3D12NativeDeviceContext : ID3D12DeviceContext
     public ValueTask<object> CreateTextureAsync(PixelSize size, string pixelFormat, CancellationToken ct)
     {
         EnsureReady(); ct.ThrowIfCancellationRequested();
-        throw new NotSupportedException("Gate A texture creation is the next native milestone.");
+        if (!string.Equals(pixelFormat, "RGBA8", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(pixelFormat, "R8G8B8A8_UNORM", StringComparison.OrdinalIgnoreCase))
+            throw new NotSupportedException($"Native Gate A currently accepts RGBA8, not '{pixelFormat}'.");
+        var resource = Motor2Native.CreateTextureRgba8(_nativeContext, checked((uint)size.Width), checked((uint)size.Height));
+        if (resource == 0) throw new InvalidOperationException("D3D12 texture allocation failed.");
+        return ValueTask.FromResult<object>(resource);
     }
 
     public ValueTask UploadTextureAsync(object texture, DecodedSurface source, CancellationToken ct)
     {
         EnsureReady(); ct.ThrowIfCancellationRequested();
-        throw new NotSupportedException("Gate A copy-queue upload is the next native milestone.");
+        if (texture is not nint resource || resource == 0)
+            throw new ArgumentException("Expected a native D3D12 texture handle.", nameof(texture));
+        if (source.NativeHandle is not byte[] rgba)
+            throw new NotSupportedException("Gate A upload requires a contiguous RGBA8 byte buffer.");
+        var expected = checked(source.Size.Width * source.Size.Height * 4);
+        if (rgba.Length < expected) throw new ArgumentException("RGBA8 buffer is smaller than the decoded surface.");
+        unsafe
+        {
+            fixed (byte* pixels = rgba)
+            {
+                var hr = Motor2Native.UploadRgba8(_nativeContext, resource, pixels, checked((uint)(source.Size.Width * 4)), checked((uint)source.Size.Height));
+                if (hr < 0) Marshal.ThrowExceptionForHR(hr);
+            }
+        }
+        return ValueTask.CompletedTask;
     }
 
     public ValueTask ReleaseAsync(object resource, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
+        if (resource is nint native && native != 0) Motor2Native.ReleaseResource(native);
         return ValueTask.CompletedTask;
     }
 
