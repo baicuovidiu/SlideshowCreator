@@ -34,6 +34,25 @@ internal static partial class Motor2Native
     [LibraryImport(LibraryName, EntryPoint = "motor2_d3d12_upload_rgba8")]
     internal static unsafe partial int UploadRgba8(nint context, nint texture, void* pixels, uint rowPitch, uint height);
 
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct DrawQuad
+    {
+        public nint Texture; public uint SrvIndex;
+        public float M11, M12, M21, M22, M31, M32, Opacity, Z;
+    }
+
+    [LibraryImport(LibraryName, EntryPoint = "motor2_d3d12_create_render_target")]
+    internal static partial nint CreateRenderTarget(nint context, uint width, uint height);
+
+    [LibraryImport(LibraryName, EntryPoint = "motor2_d3d12_begin_frame")]
+    internal static partial int BeginFrame(nint context, nint target);
+
+    [LibraryImport(LibraryName, EntryPoint = "motor2_d3d12_draw_quads")]
+    internal static unsafe partial int DrawQuads(nint context, nint target, DrawQuad* commands, uint count);
+
+    [LibraryImport(LibraryName, EntryPoint = "motor2_d3d12_end_frame")]
+    internal static partial int EndFrame(nint context, nint target);
+
     [LibraryImport(LibraryName, EntryPoint = "motor2_d3d12_release_resource")]
     internal static partial void ReleaseResource(nint resource);
 }
