@@ -69,6 +69,11 @@ public sealed class D3D12NativeDeviceContext : ID3D12CompositorDevice
         return ValueTask.FromResult<object>(target);
     }
 
+    internal ValueTask<nint> ConvertForNvencAsync(nint fp16,PixelSize size,CancellationToken ct)
+    {
+        EnsureReady();ct.ThrowIfCancellationRequested();var dst=Motor2Native.CreateNvencBgraTarget(_nativeContext,(uint)size.Width,(uint)size.Height);if(dst==0)throw new InvalidOperationException("NVENC BGRA target allocation failed.");var hr=Motor2Native.ConvertFp16ToBgra8(_nativeContext,fp16,dst);if(hr<0){Motor2Native.ReleaseRenderTarget(_nativeContext,dst);Marshal.ThrowExceptionForHR(hr);}return ValueTask.FromResult(dst);
+    }
+
     public ValueTask BeginFrameAsync(object target, CancellationToken ct)
     {
         EnsureReady(); ct.ThrowIfCancellationRequested(); var h=RequireHandle(target);
