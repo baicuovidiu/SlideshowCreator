@@ -66,6 +66,12 @@ public interface IVideoEncodeBackend
     ValueTask FinalizeAsync(CancellationToken ct);
 }
 
+/// <summary>Optional ownership signal for encoders that consume compositor-owned GPU surfaces asynchronously.</summary>
+public interface IGpuFrameCompletionSource
+{
+    ValueTask WaitForFrameCompletionAsync(object gpuFrame, CancellationToken ct);
+}
+
 public interface IRenderScheduler
 {
     Task RenderAsync(ISceneGraph scene, PixelSize outputSize, double fps, TimeSpan duration, CancellationToken ct);
