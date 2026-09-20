@@ -118,7 +118,13 @@ MOTOR2_API int motor2_d3d12_upload_rgba8(void* context, void* resource, const vo
     for(UINT y=0;y<copyRows;++y) std::memcpy(dst+fp.Offset+static_cast<size_t>(y)*fp.Footprint.RowPitch,src+static_cast<size_t>(y)*rowPitch,copyBytes); upload->Unmap(0,nullptr);
     ComPtr<ID3D12CommandAllocator> alloc; ComPtr<ID3D12GraphicsCommandList> list; if(FAILED(hr=ctx->device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_COPY,IID_PPV_ARGS(&alloc)))) return hr; if(FAILED(hr=ctx->device->CreateCommandList(0,D3D12_COMMAND_LIST_TYPE_COPY,alloc.Get(),nullptr,IID_PPV_ARGS(&list)))) return hr;
     D3D12_TEXTURE_COPY_LOCATION s{}; s.pResource=upload.Get(); s.Type=D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT; s.PlacedFootprint=fp; D3D12_TEXTURE_COPY_LOCATION d{}; d.pResource=tex->Get(); d.Type=D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX; d.SubresourceIndex=0; list->CopyTextureRegion(&d,0,0,0,&s,nullptr); if(FAILED(hr=list->Close())) return hr; ID3D12CommandList* lists[]={list.Get()}; ctx->copyQueue->ExecuteCommandLists(1,lists);
-    UINT64 fv=++ctx->fenceValue; if(FAILED(hr=ctx->copyQueue->Signal(ctx->fence.Get(),fv))) return hr; if(ctx->fence->GetCompletedValue()<fv){ if(FAILED(hr=ctx->fence->SetEventOnCompletion(fv,ctx->fenceEvent))) return hr; WaitForSingleObject(ctx->fenceEvent,INFINITE); } return S_OK;
+    UINT64 fv=++ctx->fenceValue; if(FAILED(hr=ctx->copyQueue->Signal(ctx->fence.Get(),fv))) return hr; if(ctx->fence->GetCompletedValue()<fv){ if(FAILED(hr=ctx->fence->SetEventOnCompletion(fv,ctx->fenceEvent))) return hr; WaitForSingleObject(ctx->fenceEvent,INFINITE); }
+    ComPtr<ID3D12CommandAllocator> ta; ComPtr<ID3D12GraphicsCommandList> tl;
+    if(FAILED(hr=ctx->device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,IID_PPV_ARGS(&ta)))) return hr;
+    if(FAILED(hr=ctx->device->CreateCommandList(0,D3D12_COMMAND_LIST_TYPE_DIRECT,ta.Get(),nullptr,IID_PPV_ARGS(&tl)))) return hr;
+    D3D12_RESOURCE_BARRIER b{}; b.Type=D3D12_RESOURCE_BARRIER_TYPE_TRANSITION; b.Transition.pResource=tex->Get(); b.Transition.StateBefore=D3D12_RESOURCE_STATE_COPY_DEST; b.Transition.StateAfter=D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE; b.Transition.Subresource=D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES; tl->ResourceBarrier(1,&b);
+    if(FAILED(hr=tl->Close())) return hr; ID3D12CommandList* trans[]={tl.Get()}; ctx->directQueue->ExecuteCommandLists(1,trans);
+    UINT64 tf=++ctx->fenceValue; if(FAILED(hr=ctx->directQueue->Signal(ctx->fence.Get(),tf))) return hr; if(ctx->fence->GetCompletedValue()<tf){if(FAILED(hr=ctx->fence->SetEventOnCompletion(tf,ctx->fenceEvent))) return hr; WaitForSingleObject(ctx->fenceEvent,INFINITE);} return S_OK;
 }
 
 MOTOR2_API void motor2_d3d12_release_resource(void* resource) { delete static_cast<ComPtr<ID3D12Resource>*>(resource); }
