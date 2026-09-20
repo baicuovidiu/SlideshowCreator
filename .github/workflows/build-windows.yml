@@ -57,6 +57,56 @@ jobs:
           Write-Host 'NATIVE SHA256:'
           Get-FileHash $native -Algorithm SHA256
 
+      - name: Build ONE-EXE Hardware Gate launcher
+        shell: pwsh
+        run: |
+          $stage = Join-Path $pwd 'artifacts\Motor2-HardwareGate'
+          $payload = Join-Path $pwd 'artifacts\Motor2-HardwareGate-payload.zip'
+          Compress-Archive -Path "$stage\*" -DestinationPath $payload -Force
+          $sfx = Join-Path $pwd 'artifacts\Motor2-HardwareGate-ONE-EXE'
+          New-Item -ItemType Directory -Force -Path $sfx | Out-Null
+          $launcher = Join-Path $sfx 'Motor2_HardwareGate_RTX4060.exe'
+          $payloadB64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($payload))
+          $src = @"
+          using System;
+          using System.Diagnostics;
+          using System.IO;
+          using System.IO.Compression;
+          class Program {
+            [STAThread] static int Main() {
+              var root=Path.Combine(Path.GetTempPath(),"Motor2HardwareGate_"+Guid.NewGuid().ToString("N"));
+              Directory.CreateDirectory(root);
+              try {
+                var zip=Path.Combine(root,"payload.zip");
+                File.WriteAllBytes(zip,Convert.FromBase64String("$payloadB64"));
+                ZipFile.ExtractToDirectory(zip,root);
+                File.Delete(zip);
+                var exe=Path.Combine(root,"Motor2.HardwareGate.exe");
+                if(!File.Exists(exe)) throw new FileNotFoundException("Embedded Hardware Gate missing.",exe);
+                var p=Process.Start(new ProcessStartInfo(exe){UseShellExecute=false,WorkingDirectory=root});
+                p.WaitForExit();
+                return p.ExitCode;
+              } catch(Exception ex) {
+                Console.Error.WriteLine("FAIL launcher: "+ex);
+                Console.WriteLine("Apasa ENTER pentru inchidere...");
+                Console.ReadLine();
+                return 2;
+              }
+            }
+          }
+          "@
+          Add-Type -TypeDefinition $src -OutputAssembly $launcher -OutputType ConsoleApplication -ReferencedAssemblies @('System.IO.Compression','System.IO.Compression.FileSystem')
+          if (-not (Test-Path $launcher)) { throw 'FAIL: ONE-EXE launcher missing' }
+          Write-Host 'ONE-EXE SHA256:'
+          Get-FileHash $launcher -Algorithm SHA256
+
+      - name: Upload ONE-EXE Hardware Gate
+        uses: actions/upload-artifact@v4
+        with:
+          name: Motor2-HardwareGate-ONE-EXE
+          path: artifacts/Motor2-HardwareGate-ONE-EXE/Motor2_HardwareGate_RTX4060.exe
+          if-no-files-found: error
+
       - name: Upload hardware gate managed package
         uses: actions/upload-artifact@v4
         with:
