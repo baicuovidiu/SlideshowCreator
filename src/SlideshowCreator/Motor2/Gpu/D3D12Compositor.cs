@@ -15,7 +15,7 @@ public interface ID3D12CompositorDevice : ID3D12DeviceContext
 {
     ValueTask<object> CreateRenderTargetAsync(PixelSize size,CancellationToken ct);
     ValueTask BeginFrameAsync(object target,CancellationToken ct);
-    ValueTask DrawTexturedQuadAsync(object target,GpuDrawCommand command,CancellationToken ct);
+    ValueTask DrawTexturedQuadsAsync(object target,IReadOnlyList<GpuDrawCommand> commands,CancellationToken ct);
     ValueTask EndFrameAsync(object target,CancellationToken ct);
 }
 
@@ -45,10 +45,9 @@ public sealed class D3D12Compositor : IGraphicsBackend
         {
             if(!textures.TryGetValue(obj.Asset,out var tex))
                 throw new InvalidOperationException($"GPU texture missing for asset {obj.Asset}.");
-            var cmd=new GpuDrawCommand(obj.Asset,tex,obj.Transform,obj.Opacity,obj.Z,_size);
-            await _device.DrawTexturedQuadAsync(target,cmd,ct);
-            commands.Add(cmd);
+            commands.Add(new GpuDrawCommand(obj.Asset,tex,obj.Transform,obj.Opacity,obj.Z,_size));
         }
+        await _device.DrawTexturedQuadsAsync(target,commands,ct);
         await _device.EndFrameAsync(target,ct);
         return new GpuComposedFrame(_size,frame.Time,target,commands.ToImmutable());
     }
