@@ -112,6 +112,7 @@ public partial class MainWindow : Window
             if (Media.All(m => m.Type == "Foto"))
             {
                 ExportPhotosSinglePass(dest, dir, videoEncoder);
+                ValidateExport(dest);
                 return;
             }
 
@@ -132,6 +133,7 @@ public partial class MainWindow : Window
             var audioInput = music == null ? "" : $" -stream_loop -1 -i \"{music}\"";
             var audioMap = music == null ? " -an" : $" -map {musicIndex}:a -c:a aac -b:a 256k -shortest";
             Ffmpeg($"-y{inputs}{audioInput} -filter_complex \"{filters}\" -map \"[outv]\"{audioMap} {videoEncoder} -movflags +faststart \"{dest}\"");
+            ValidateExport(dest);
         }
         finally { try { Directory.Delete(dir, true); } catch { } }
     }
@@ -167,6 +169,18 @@ public partial class MainWindow : Window
         catch { }
         finally { try { if (File.Exists(probe)) File.Delete(probe); } catch { } }
         return "-c:v libx264 -preset fast -crf 19";
+    }
+
+    static void ValidateExport(string path)
+    {
+        if (!File.Exists(path) || new FileInfo(path).Length < 1024)
+            throw new Exception("Export invalid: fișierul MP4 lipsește sau este gol.");
+        var output = Run("ffprobe.exe", $"-v error -select_streams v:0 -show_entries stream=codec_name,width,height -show_entries format=duration -of default=noprint_wrappers=1 \"{path}\"", out var code);
+        if (code != 0 || !output.Contains("codec_name=h264", StringComparison.OrdinalIgnoreCase) ||
+            !output.Contains("width=1920", StringComparison.OrdinalIgnoreCase) ||
+            !output.Contains("height=1080", StringComparison.OrdinalIgnoreCase) ||
+            !output.Contains("duration=", StringComparison.OrdinalIgnoreCase))
+            throw new Exception("Export invalid: verificarea ffprobe a eșuat.\n" + output);
     }
 
     static string FfconcatPath(string path) => path.Replace("'", "'\\''");
