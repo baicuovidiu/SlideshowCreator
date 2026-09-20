@@ -11,6 +11,10 @@
 
 using Microsoft::WRL::ComPtr;
 
+struct NativeRenderTarget {
+    ComPtr<ID3D12Resource> resource;
+};
+
 struct NativeContext {
     ComPtr<IDXGIFactory6> factory;
     ComPtr<IDXGIAdapter1> adapter;
@@ -24,7 +28,6 @@ struct NativeContext {
     ComPtr<ID3D12PipelineState> pipelineState;
     ComPtr<ID3D12DescriptorHeap> rtvHeap;
     ComPtr<ID3D12DescriptorHeap> srvHeap;
-    UINT rtvStride = 0;
     UINT srvStride = 0;
     UINT nextSrv = 0;
     std::unordered_map<ID3D12Resource*, UINT> srvByResource;
@@ -79,9 +82,6 @@ MOTOR2_API void* motor2_d3d12_create() {
     if (FAILED(ctx->device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&ctx->fence)))) { delete ctx; return nullptr; }
     ctx->fenceEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (!ctx->fenceEvent) { delete ctx; return nullptr; }
-    D3D12_DESCRIPTOR_HEAP_DESC rh{}; rh.Type=D3D12_DESCRIPTOR_HEAP_TYPE_RTV; rh.NumDescriptors=1;
-    if(FAILED(ctx->device->CreateDescriptorHeap(&rh,IID_PPV_ARGS(&ctx->rtvHeap)))) { CloseHandle(ctx->fenceEvent); delete ctx; return nullptr; }
-    ctx->rtvStride=ctx->device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
     D3D12_DESCRIPTOR_HEAP_DESC sh{}; sh.Type=D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV; sh.NumDescriptors=4096; sh.Flags=D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
     if(FAILED(ctx->device->CreateDescriptorHeap(&sh,IID_PPV_ARGS(&ctx->srvHeap)))) { CloseHandle(ctx->fenceEvent); delete ctx; return nullptr; }
     ctx->srvStride=ctx->device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
@@ -164,12 +164,14 @@ float4 PS(VSOut i):SV_TARGET { return tex0.Sample(samp0,i.uv)*r1.w; })";
 
 MOTOR2_API void* motor2_d3d12_create_render_target(void* context, std::uint32_t width, std::uint32_t height) {
     auto* ctx=static_cast<NativeContext*>(context); if(!ctx||!width||!height) return nullptr;
-    auto* target=new ComPtr<ID3D12Resource>();
+    auto* target=new NativeRenderTarget();
     D3D12_HEAP_PROPERTIES heap{}; heap.Type=D3D12_HEAP_TYPE_DEFAULT;
     D3D12_RESOURCE_DESC d{}; d.Dimension=D3D12_RESOURCE_DIMENSION_TEXTURE2D; d.Width=width; d.Height=height; d.DepthOrArraySize=1; d.MipLevels=1; d.Format=DXGI_FORMAT_R16G16B16A16_FLOAT; d.SampleDesc.Count=1; d.Layout=D3D12_TEXTURE_LAYOUT_UNKNOWN; d.Flags=D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
     D3D12_CLEAR_VALUE clear{}; clear.Format=d.Format; clear.Color[3]=1.0f;
-    if(FAILED(ctx->device->CreateCommittedResource(&heap,D3D12_HEAP_FLAG_NONE,&d,D3D12_RESOURCE_STATE_RENDER_TARGET,&clear,IID_PPV_ARGS(target->ReleaseAndGetAddressOf())))){delete target;return nullptr;}
-    ctx->device->CreateRenderTargetView(target->Get(),nullptr,ctx->rtvHeap->GetCPUDescriptorHandleForHeapStart());
+    if(FAILED(ctx->device->CreateCommittedResource(&heap,D3D12_HEAP_FLAG_NONE,&d,D3D12_RESOURCE_STATE_RENDER_TARGET,&clear,IID_PPV_ARGS(target->resource.ReleaseAndGetAddressOf())))){delete target;return nullptr;}
+    D3D12_DESCRIPTOR_HEAP_DESC rh{}; rh.Type=D3D12_DESCRIPTOR_HEAP_TYPE_RTV; rh.NumDescriptors=1;
+    if(FAILED(ctx->device->CreateDescriptorHeap(&rh,IID_PPV_ARGS(&target->rtvHeap)))){delete target;return nullptr;}
+    ctx->device->CreateRenderTargetView(target->resource.Get(),nullptr,target->rtvHeap->GetCPUDescriptorHandleForHeapStart());
     return target;
 }
 
@@ -182,14 +184,14 @@ MOTOR2_API int motor2_d3d12_draw_quads(void* context, void* target, const Motor2
     if(!context||!target||(count&&!commands)) return E_INVALIDARG;
     auto* ctx=static_cast<NativeContext*>(context);
     HRESULT hr=EnsureQuadPipeline(ctx); if(FAILED(hr)) return hr;
-    auto* tgt=static_cast<ComPtr<ID3D12Resource>*>(target);
+    auto* tgt=static_cast<NativeRenderTarget*>(target);
     const UINT slot=ctx->frameIndex++ % NativeContext::FrameCount; const UINT64 pending=ctx->frameFence[slot];
     if(pending && ctx->fence->GetCompletedValue()<pending){if(FAILED(hr=ctx->fence->SetEventOnCompletion(pending,ctx->fenceEvent))) return hr; WaitForSingleObject(ctx->fenceEvent,INFINITE);}
     auto* alloc=ctx->frameAllocators[slot].Get(); if(FAILED(hr=alloc->Reset())) return hr;
     ComPtr<ID3D12GraphicsCommandList> list;
     if(FAILED(hr=ctx->device->CreateCommandList(0,D3D12_COMMAND_LIST_TYPE_DIRECT,alloc,ctx->pipelineState.Get(),IID_PPV_ARGS(&list)))) return hr;
-    auto rtv=ctx->rtvHeap->GetCPUDescriptorHandleForHeapStart(); list->OMSetRenderTargets(1,&rtv,FALSE,nullptr);
-    auto td=(*tgt)->GetDesc(); D3D12_VIEWPORT vp{0,0,static_cast<float>(td.Width),static_cast<float>(td.Height),0,1}; D3D12_RECT sc{0,0,static_cast<LONG>(td.Width),static_cast<LONG>(td.Height)}; list->RSSetViewports(1,&vp); list->RSSetScissorRects(1,&sc);
+    auto rtv=tgt->rtvHeap->GetCPUDescriptorHandleForHeapStart(); list->OMSetRenderTargets(1,&rtv,FALSE,nullptr);
+    auto td=tgt->resource->GetDesc(); D3D12_VIEWPORT vp{0,0,static_cast<float>(td.Width),static_cast<float>(td.Height),0,1}; D3D12_RECT sc{0,0,static_cast<LONG>(td.Width),static_cast<LONG>(td.Height)}; list->RSSetViewports(1,&vp); list->RSSetScissorRects(1,&sc);
     const float clear[4]={0,0,0,1}; list->ClearRenderTargetView(rtv,clear,0,nullptr);
     list->SetGraphicsRootSignature(ctx->rootSignature.Get()); ID3D12DescriptorHeap* heaps[]={ctx->srvHeap.Get()}; list->SetDescriptorHeaps(1,heaps); list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     for(std::uint32_t i=0;i<count;++i){
