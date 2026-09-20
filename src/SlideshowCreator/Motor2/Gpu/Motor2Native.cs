@@ -54,5 +54,8 @@ internal static partial class Motor2Native
     internal static partial int EndFrame(nint context, nint target);
 
     [LibraryImport(LibraryName, EntryPoint = "motor2_d3d12_release_resource")]
-    internal static partial void ReleaseResource(nint resource);
+    internal static partial void ReleaseResource(nint context, nint resource);
+
+    [LibraryImport(LibraryName, EntryPoint = "motor2_d3d12_release_render_target")]
+    internal static partial void ReleaseRenderTarget(nint context, nint target);
 }
