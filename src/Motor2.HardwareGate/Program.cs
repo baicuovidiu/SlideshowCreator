@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using SlideshowCreator.Motor2.Core;
 using System.Security.Cryptography;
 
@@ -8,7 +9,7 @@ try
     if(!OperatingSystem.IsWindows())Fail("Windows required.");
     var profiler=new WindowsHardwareProfiler();
     var caps=await profiler.ProbeAsync(CancellationToken.None);
-    Console.WriteLine($"Adapter={caps.AdapterName} VRAM={caps.VramBytes} D3D12={caps.D3D12} NVENC={caps.NvEnc}");
+    Console.WriteLine($"Adapter={caps.AdapterName} VRAM={caps.DedicatedVideoMemoryBytes} D3D12={caps.D3D12} NVENC={caps.NvEnc}");
     if(!caps.D3D12)Fail("D3D12 capability not proven.");
     if(!caps.NvEnc)Fail("NVENC capability not proven by driver API.");
 
@@ -25,8 +26,9 @@ try
     long totalBytes=0; byte[]? first=null;
     for(int i=0;i<frames;i++)
     {
-        var scene=new SceneSnapshot(size,TimeSpan.FromSeconds(i/30.0),[]);
-        var plan=new FramePlan(scene,[]);
+        var t=TimeSpan.FromSeconds(i/30.0);
+        var scene=new EvaluatedScene(t,size,ImmutableArray<SceneObject>.Empty);
+        var plan=new FramePlan(t,ImmutableArray<DecodeRequest>.Empty,scene);
         var frame=await compositor.ComposeAsync(plan,new Dictionary<AssetId,GpuTextureHandle>(),CancellationToken.None);
         try {
             await encoder.EncodeAsync(frame,TimeSpan.FromSeconds(i/30.0),CancellationToken.None);
