@@ -108,11 +108,13 @@ public partial class MainWindow : Window
         var dir = Path.Combine(Path.GetTempPath(), "SlideshowCreator", Guid.NewGuid().ToString("N")); Directory.CreateDirectory(dir);
         try
         {
+            ValidateTimeline();
+            var expectedDuration = Media.Sum(m => m.Duration);
             var videoEncoder = SelectVideoEncoder(dir);
             if (Media.All(m => m.Type == "Foto"))
             {
                 ExportPhotosSinglePass(dest, dir, videoEncoder);
-                ValidateExport(dest);
+                ValidateExport(dest, expectedDuration);
                 return;
             }
 
@@ -133,9 +135,25 @@ public partial class MainWindow : Window
             var audioInput = music == null ? "" : $" -stream_loop -1 -i \"{music}\"";
             var audioMap = music == null ? " -an" : $" -map {musicIndex}:a -c:a aac -b:a 256k -shortest";
             Ffmpeg($"-y{inputs}{audioInput} -filter_complex \"{filters}\" -map \"[outv]\"{audioMap} {videoEncoder} -movflags +faststart \"{dest}\"");
-            ValidateExport(dest);
+            ValidateExport(dest, expectedDuration);
         }
         finally { try { Directory.Delete(dir, true); } catch { } }
+    }
+
+    void ValidateTimeline()
+    {
+        foreach (var m in Media)
+        {
+            if (!File.Exists(m.Path)) throw new FileNotFoundException("Material lipsă din proiect.", m.Path);
+            if (!double.IsFinite(m.Duration) || m.Duration < .1) throw new Exception("Durată invalidă: " + Path.GetFileName(m.Path));
+            if (!double.IsFinite(m.TrimIn) || m.TrimIn < 0) throw new Exception("Trim IN invalid: " + Path.GetFileName(m.Path));
+            if (m.Type == "Video")
+            {
+                var sourceDuration = Probe(m.Path);
+                if (m.TrimIn >= sourceDuration || m.TrimIn + m.Duration > sourceDuration + .05)
+                    throw new Exception($"Trim-ul depășește clipul: {Path.GetFileName(m.Path)} (sursă {F(sourceDuration)}s, IN {F(m.TrimIn)}s, durată {F(m.Duration)}s).");
+            }
+        }
     }
 
     void ExportPhotosSinglePass(string dest, string dir, string videoEncoder)
@@ -171,16 +189,17 @@ public partial class MainWindow : Window
         return "-c:v libx264 -preset fast -crf 19";
     }
 
-    static void ValidateExport(string path)
+    static void ValidateExport(string path, double expectedDuration)
     {
         if (!File.Exists(path) || new FileInfo(path).Length < 1024)
             throw new Exception("Export invalid: fișierul MP4 lipsește sau este gol.");
         var output = Run("ffprobe.exe", $"-v error -select_streams v:0 -show_entries stream=codec_name,width,height -show_entries format=duration -of default=noprint_wrappers=1 \"{path}\"", out var code);
+        var durationLine = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault(x => x.StartsWith("duration=", StringComparison.OrdinalIgnoreCase));
+        var durationOk = durationLine != null && double.TryParse(durationLine.AsSpan("duration=".Length), NumberStyles.Float, CultureInfo.InvariantCulture, out var actualDuration) && actualDuration >= expectedDuration - .25 && actualDuration <= expectedDuration + .75;
         if (code != 0 || !output.Contains("codec_name=h264", StringComparison.OrdinalIgnoreCase) ||
             !output.Contains("width=1920", StringComparison.OrdinalIgnoreCase) ||
-            !output.Contains("height=1080", StringComparison.OrdinalIgnoreCase) ||
-            !output.Contains("duration=", StringComparison.OrdinalIgnoreCase))
-            throw new Exception("Export invalid: verificarea ffprobe a eșuat.\n" + output);
+            !output.Contains("height=1080", StringComparison.OrdinalIgnoreCase) || !durationOk)
+            throw new Exception($"Export invalid: verificarea ffprobe a eșuat (durată așteptată {F(expectedDuration)}s).\n" + output);
     }
 
     static string FfconcatPath(string path) => path.Replace("'", "'\\''");
