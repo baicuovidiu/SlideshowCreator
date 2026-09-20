@@ -64,6 +64,9 @@ internal static partial class Motor2Native
     [LibraryImport(LibraryName, EntryPoint="motor2_nvenc_get_bitstream")] internal static unsafe partial int NvencGetBitstream(nint session,ulong submissionId,void* destination,uint capacity,out uint written);
     [LibraryImport(LibraryName, EntryPoint="motor2_nvenc_close")] internal static partial void NvencClose(nint session);
 
+    [StructLayout(LayoutKind.Sequential)] internal struct NvencProbeInfo { public uint ApiVersion,MaxSupportedVersion; }
+    [LibraryImport(LibraryName, EntryPoint="motor2_nvenc_probe")] internal static partial int NvencProbe(ref NvencProbeInfo info);
+
     [LibraryImport(LibraryName, EntryPoint = "motor2_d3d12_release_resource")]
     internal static partial void ReleaseResource(nint context, nint resource);
 
