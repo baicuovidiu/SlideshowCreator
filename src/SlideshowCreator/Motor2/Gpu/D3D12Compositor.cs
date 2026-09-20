@@ -37,6 +37,12 @@ public sealed class D3D12Compositor : IGraphicsBackend
         await _device.InitializeAsync(ct);
     }
 
+    public async ValueTask ReleaseComposedFrameAsync(object frame,CancellationToken ct)
+    {
+        if(frame is not GpuComposedFrame gpu)throw new ArgumentException("Expected GPU composed frame.",nameof(frame));
+        await _device.ReleaseRenderTargetAsync(gpu.NativeSurface,ct);
+    }
+
     public async ValueTask<object> ComposeAsync(FramePlan frame,IReadOnlyDictionary<AssetId,GpuTextureHandle> textures,CancellationToken ct)
     {
         _size=frame.Scene.OutputSize;
