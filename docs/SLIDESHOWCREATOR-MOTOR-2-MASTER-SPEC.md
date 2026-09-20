@@ -120,3 +120,11 @@ M2.0-F audio intelligence.
 M2.0-G stress harness, installer, real-media validation.
 
 This file overrides legacy implementation assumptions when they conflict with Motor 2.0 architecture. Legacy behavior requirements remain only where explicitly preserved here or in the canonical product specification.
+## Regula absolută FAIL = DEFECT DE REPARAT
+Orice rezultat **FAIL** apărut în compile gate, audit static, audit diferențial/CI, audit adversarial, test runtime, test hardware, test de pixeli, stress test, test cu media reală, export sau validare este tratat obligatoriu ca **defect de investigat până la cauza-rădăcină și reparat**.
+
+Este interzis să se ocolească un FAIL prin dezactivarea testului, slăbirea criteriului, reclasificarea lui ca neimportant, ascunderea erorii, ignorarea rezultatului, schimbarea testului doar ca să devină verde sau continuarea livrării ca și cum FAIL-ul nu ar exista. Un test poate fi corectat numai dacă testul însuși este demonstrabil greșit; cauza și corecția testului trebuie documentate.
+
+După orice reparație se rulează din nou verificarea care a eșuat și verificările relevante de regresie. **FAIL-ul este închis numai când cauza-rădăcină este identificată, remedierea este în cod, iar reverificarea trece.** Build Success rămâne diferit de validarea runtime/end-to-end.
+
+Această regulă are prioritate pentru toate versiunile Motor 2.0 și pentru toate etapele viitoare ale proiectului.
