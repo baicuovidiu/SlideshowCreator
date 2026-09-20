@@ -37,7 +37,7 @@ try
     var size=new PixelSize(1920,1080);
     await encoder.InitializeAsync(size,30,caps,CancellationToken.None);
 
-    const int frames=90;
+    const int frames=900;
     long totalBytes=0; byte[]? first=null; int completedPackets=0;
     for(int i=0;i<frames;i++)
     {
@@ -58,6 +58,7 @@ try
     bool annexB=first.AsSpan().IndexOf(new byte[]{0,0,1})>=0;
     if(!annexB)Fail("H.264 Annex-B start code not found.");
     var hash=Convert.ToHexString(SHA256.HashData(first));
+    if(nativeSession.CompletedBitstreams.Count!=0)Fail($"Bitstream retention leak: {nativeSession.CompletedBitstreams.Count} packets remained after incremental consumption.");
     var details=$"Adapter={caps.AdapterName}\r\nVRAM={caps.DedicatedVideoMemoryBytes}\r\nD3D12={caps.D3D12}\r\nNVENC={caps.NvEnc}\r\nframes={frames}\r\nh264Bytes={totalBytes}\r\nfirstSHA256={hash}\r\nPipeline=D3D12 -> FP16 -> GPU BGRA -> NVENC H.264 -> completion -> release";
     SaveResult("PASS",details);
     Pause();
