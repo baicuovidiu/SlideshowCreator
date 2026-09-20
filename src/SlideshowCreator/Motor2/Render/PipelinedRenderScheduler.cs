@@ -50,3 +50,4 @@ public sealed class PipelinedRenderScheduler : IRenderScheduler
         await _encoder.FinalizeAsync(ct);
     }
 }
+
