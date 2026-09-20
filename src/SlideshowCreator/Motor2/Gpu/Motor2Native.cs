@@ -61,6 +61,7 @@ internal static partial class Motor2Native
 
     [StructLayout(LayoutKind.Sequential)] internal struct NvencSessionSettings { public uint Width,Height,FpsNum,FpsDen,Bitrate; }
     [LibraryImport(LibraryName, EntryPoint="motor2_nvenc_open_d3d12")] internal static partial nint NvencOpenD3D12(nint d3d12Context,ref NvencSessionSettings settings);
+    [LibraryImport(LibraryName, EntryPoint="motor2_nvenc_get_last_open_status")] internal static partial int NvencGetLastOpenStatus();
     [LibraryImport(LibraryName, EntryPoint="motor2_nvenc_submit")] internal static partial int NvencSubmit(nint session,nint target,long pts100ns,out ulong submissionId);
     [LibraryImport(LibraryName, EntryPoint="motor2_nvenc_wait")] internal static partial int NvencWait(nint session,ulong submissionId);
     [LibraryImport(LibraryName, EntryPoint="motor2_nvenc_drain")] internal static partial int NvencDrain(nint session);
