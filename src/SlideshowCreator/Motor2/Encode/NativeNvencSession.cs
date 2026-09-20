@@ -16,7 +16,7 @@ public sealed class NativeNvencSession : INvencNativeSession
         ct.ThrowIfCancellationRequested();
         var ctx=_device.NativeContextForInterop; _size=settings.Size;
         var s=new Motor2Native.NvencSessionSettings{Width=(uint)settings.Size.Width,Height=(uint)settings.Size.Height,FpsNum=(uint)Math.Round(settings.Fps*1000),FpsDen=1000,Bitrate=(uint)settings.Bitrate};
-        _session=Motor2Native.NvencOpenD3D12(ctx,ref s); if(_session==0)throw new InvalidOperationException("Native NVENC session could not be opened.");
+        _session=Motor2Native.NvencOpenD3D12(ctx,ref s); if(_session==0){var status=Motor2Native.NvencGetLastOpenStatus();throw new InvalidOperationException($"Native NVENC session could not be opened. stage/status={status}.");}
         return ValueTask.CompletedTask;
     }
     public ValueTask<ulong> SubmitD3D12SurfaceAsync(object nativeSurface,TimeSpan pts,CancellationToken ct)
