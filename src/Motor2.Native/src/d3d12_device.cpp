@@ -275,3 +275,82 @@ MOTOR2_API int motor2_nvenc_probe(Motor2NvencProbeInfo* info) {
     return E_NOTIMPL;
 #endif
 }
+
+#ifdef MOTOR2_HAS_NVENC_SDK
+struct NativeNvencSession {
+    NV_ENCODE_API_FUNCTION_LIST api{};
+    void* encoder=nullptr;
+    NativeContext* d3d=nullptr;
+    Motor2NvencSessionSettings settings{};
+    std::uint64_t nextId=1;
+    struct Submission { NV_ENC_REGISTERED_PTR registered=nullptr; NV_ENC_INPUT_PTR mapped=nullptr; NV_ENC_OUTPUT_PTR bitstream=nullptr; bool complete=false; };
+    std::unordered_map<std::uint64_t,Submission> submissions;
+};
+static GUID Motor2H264Preset(){ return NV_ENC_PRESET_P4_GUID; }
+#endif
+
+MOTOR2_API void* motor2_nvenc_open_d3d12(void* d3d12Context,const Motor2NvencSessionSettings* settings){
+#ifndef MOTOR2_HAS_NVENC_SDK
+    (void)d3d12Context;(void)settings; return nullptr;
+#else
+    auto* d3d=static_cast<NativeContext*>(d3d12Context); if(!d3d||!settings||!settings->width||!settings->height)return nullptr;
+    HMODULE dll=LoadLibraryW(L"nvEncodeAPI64.dll"); if(!dll)return nullptr;
+    using CreateFn=NVENCSTATUS (NVENCAPI*)(NV_ENCODE_API_FUNCTION_LIST*);
+    auto create=reinterpret_cast<CreateFn>(GetProcAddress(dll,"NvEncodeAPICreateInstance")); if(!create){FreeLibrary(dll);return nullptr;}
+    auto* s=new NativeNvencSession(); s->d3d=d3d; s->settings=*settings; s->api.version=NV_ENCODE_API_FUNCTION_LIST_VER;
+    if(create(&s->api)!=NV_ENC_SUCCESS){delete s;FreeLibrary(dll);return nullptr;}
+    NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS op{}; op.version=NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS_VER; op.device=d3d->device.Get(); op.deviceType=NV_ENC_DEVICE_TYPE_DIRECTX; op.apiVersion=NVENCAPI_VERSION;
+    if(s->api.nvEncOpenEncodeSessionEx(&op,&s->encoder)!=NV_ENC_SUCCESS){delete s;FreeLibrary(dll);return nullptr;}
+    NV_ENC_INITIALIZE_PARAMS ip{}; NV_ENC_CONFIG cfg{}; ip.version=NV_ENC_INITIALIZE_PARAMS_VER; cfg.version=NV_ENC_CONFIG_VER; ip.encodeGUID=NV_ENC_CODEC_H264_GUID; ip.presetGUID=Motor2H264Preset(); ip.encodeWidth=settings->width; ip.encodeHeight=settings->height; ip.darWidth=settings->width; ip.darHeight=settings->height; ip.frameRateNum=settings->fpsNum; ip.frameRateDen=settings->fpsDen?settings->fpsDen:1; ip.enablePTD=1; ip.encodeConfig=&cfg;
+    NV_ENC_PRESET_CONFIG pc{}; pc.version=NV_ENC_PRESET_CONFIG_VER; pc.presetCfg.version=NV_ENC_CONFIG_VER;
+    if(s->api.nvEncGetEncodePresetConfigEx(s->encoder,ip.encodeGUID,ip.presetGUID,NV_ENC_TUNING_INFO_HIGH_QUALITY,&pc)!=NV_ENC_SUCCESS){s->api.nvEncDestroyEncoder(s->encoder);delete s;FreeLibrary(dll);return nullptr;}
+    cfg=pc.presetCfg; cfg.rcParams.rateControlMode=NV_ENC_PARAMS_RC_VBR; cfg.rcParams.averageBitRate=settings->bitrate; cfg.rcParams.maxBitRate=settings->bitrate+settings->bitrate/2; ip.tuningInfo=NV_ENC_TUNING_INFO_HIGH_QUALITY;
+    if(s->api.nvEncInitializeEncoder(s->encoder,&ip)!=NV_ENC_SUCCESS){s->api.nvEncDestroyEncoder(s->encoder);delete s;FreeLibrary(dll);return nullptr;}
+    return s;
+#endif
+}
+MOTOR2_API int motor2_nvenc_submit(void* session,void* renderTarget,std::int64_t pts100ns,std::uint64_t* submissionId){
+#ifndef MOTOR2_HAS_NVENC_SDK
+    return E_NOTIMPL;
+#else
+    auto* s=static_cast<NativeNvencSession*>(session); auto* rt=static_cast<NativeRenderTarget*>(renderTarget); if(!s||!rt||!submissionId)return E_INVALIDARG;
+    WaitForGpu(s->d3d);
+    NV_ENC_REGISTER_RESOURCE rr{}; rr.version=NV_ENC_REGISTER_RESOURCE_VER; rr.resourceType=NV_ENC_INPUT_RESOURCE_TYPE_DIRECTX; rr.resourceToRegister=rt->resource.Get(); rr.width=s->settings.width; rr.height=s->settings.height; rr.pitch=0; rr.bufferFormat=NV_ENC_BUFFER_FORMAT_ARGB10; rr.bufferUsage=NV_ENC_INPUT_IMAGE;
+    if(s->api.nvEncRegisterResource(s->encoder,&rr)!=NV_ENC_SUCCESS)return E_FAIL;
+    NV_ENC_MAP_INPUT_RESOURCE mr{}; mr.version=NV_ENC_MAP_INPUT_RESOURCE_VER; mr.registeredResource=rr.registeredResource; if(s->api.nvEncMapInputResource(s->encoder,&mr)!=NV_ENC_SUCCESS){s->api.nvEncUnregisterResource(s->encoder,rr.registeredResource);return E_FAIL;}
+    NV_ENC_CREATE_BITSTREAM_BUFFER bb{}; bb.version=NV_ENC_CREATE_BITSTREAM_BUFFER_VER; if(s->api.nvEncCreateBitstreamBuffer(s->encoder,&bb)!=NV_ENC_SUCCESS){s->api.nvEncUnmapInputResource(s->encoder,mr.mappedResource);s->api.nvEncUnregisterResource(s->encoder,rr.registeredResource);return E_FAIL;}
+    NV_ENC_PIC_PARAMS pp{}; pp.version=NV_ENC_PIC_PARAMS_VER; pp.inputBuffer=mr.mappedResource; pp.bufferFmt=mr.mappedBufferFmt; pp.inputWidth=s->settings.width; pp.inputHeight=s->settings.height; pp.outputBitstream=bb.bitstreamBuffer; pp.inputTimeStamp=pts100ns; pp.pictureStruct=NV_ENC_PIC_STRUCT_FRAME;
+    auto st=s->api.nvEncEncodePicture(s->encoder,&pp); if(st!=NV_ENC_SUCCESS && st!=NV_ENC_ERR_NEED_MORE_INPUT){s->api.nvEncDestroyBitstreamBuffer(s->encoder,bb.bitstreamBuffer);s->api.nvEncUnmapInputResource(s->encoder,mr.mappedResource);s->api.nvEncUnregisterResource(s->encoder,rr.registeredResource);return E_FAIL;}
+    auto id=s->nextId++; s->submissions[id]={rr.registeredResource,mr.mappedResource,bb.bitstreamBuffer,false}; *submissionId=id; return S_OK;
+#endif
+}
+MOTOR2_API int motor2_nvenc_wait(void* session,std::uint64_t submissionId){
+#ifndef MOTOR2_HAS_NVENC_SDK
+ return E_NOTIMPL;
+#else
+ auto* s=static_cast<NativeNvencSession*>(session); if(!s)return E_INVALIDARG; auto it=s->submissions.find(submissionId); if(it==s->submissions.end())return E_INVALIDARG;
+ NV_ENC_LOCK_BITSTREAM lk{}; lk.version=NV_ENC_LOCK_BITSTREAM_VER; lk.outputBitstream=it->second.bitstream; lk.doNotWait=0; if(s->api.nvEncLockBitstream(s->encoder,&lk)!=NV_ENC_SUCCESS)return E_FAIL; s->api.nvEncUnlockBitstream(s->encoder,it->second.bitstream); it->second.complete=true; return S_OK;
+#endif
+}
+MOTOR2_API int motor2_nvenc_get_bitstream(void* session,std::uint64_t submissionId,void* destination,std::uint32_t capacity,std::uint32_t* written){
+#ifndef MOTOR2_HAS_NVENC_SDK
+ return E_NOTIMPL;
+#else
+ auto* s=static_cast<NativeNvencSession*>(session); if(!s||!written)return E_INVALIDARG; auto it=s->submissions.find(submissionId); if(it==s->submissions.end())return E_INVALIDARG;
+ NV_ENC_LOCK_BITSTREAM lk{}; lk.version=NV_ENC_LOCK_BITSTREAM_VER; lk.outputBitstream=it->second.bitstream; lk.doNotWait=0; if(s->api.nvEncLockBitstream(s->encoder,&lk)!=NV_ENC_SUCCESS)return E_FAIL; *written=lk.bitstreamSizeInBytes; if(!destination||capacity<*written){s->api.nvEncUnlockBitstream(s->encoder,it->second.bitstream);return HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);} std::memcpy(destination,lk.bitstreamBufferPtr,*written); s->api.nvEncUnlockBitstream(s->encoder,it->second.bitstream); it->second.complete=true; return S_OK;
+#endif
+}
+MOTOR2_API int motor2_nvenc_drain(void* session){
+#ifndef MOTOR2_HAS_NVENC_SDK
+ return E_NOTIMPL;
+#else
+ auto* s=static_cast<NativeNvencSession*>(session); if(!s)return E_INVALIDARG; NV_ENC_PIC_PARAMS pp{}; pp.version=NV_ENC_PIC_PARAMS_VER; pp.encodePicFlags=NV_ENC_PIC_FLAG_EOS; auto st=s->api.nvEncEncodePicture(s->encoder,&pp); return st==NV_ENC_SUCCESS?S_OK:E_FAIL;
+#endif
+}
+MOTOR2_API void motor2_nvenc_close(void* session){
+#ifdef MOTOR2_HAS_NVENC_SDK
+ auto* s=static_cast<NativeNvencSession*>(session); if(!s)return; for(auto& kv:s->submissions){auto& x=kv.second;if(x.mapped)s->api.nvEncUnmapInputResource(s->encoder,x.mapped);if(x.registered)s->api.nvEncUnregisterResource(s->encoder,x.registered);if(x.bitstream)s->api.nvEncDestroyBitstreamBuffer(s->encoder,x.bitstream);} if(s->encoder)s->api.nvEncDestroyEncoder(s->encoder); delete s;
+#else
+ (void)session;
+#endif
+}
