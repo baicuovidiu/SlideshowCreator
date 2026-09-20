@@ -33,7 +33,7 @@ jobs:
         run: |
           $m2 = Get-ChildItem '.\src\SlideshowCreator\Motor2' -Recurse -Filter *.cs
           if (-not $m2) { throw 'Motor2 sources missing.' }
-          $bad = $m2 | Select-String -Pattern 'xfade|visual_raw|visual_polished|temporary MP4' -SimpleMatch
+          $bad = $m2 | Select-String -Pattern @('xfade','visual_raw','visual_polished') -SimpleMatch
           if ($bad) { throw 'Legacy render pattern leaked into Motor2.' }
 
 # compile-gate-touch: 2026-09-20
