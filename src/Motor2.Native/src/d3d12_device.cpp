@@ -28,6 +28,10 @@ struct NativeContext {
     UINT srvStride = 0;
     UINT nextSrv = 0;
     std::unordered_map<ID3D12Resource*, UINT> srvByResource;
+    static constexpr UINT FrameCount = 3;
+    ComPtr<ID3D12CommandAllocator> frameAllocators[FrameCount];
+    UINT64 frameFence[FrameCount]{};
+    UINT frameIndex = 0;
 };
 
 static HRESULT SelectAdapter(IDXGIFactory6* factory, IDXGIAdapter1** selected) {
@@ -81,6 +85,7 @@ MOTOR2_API void* motor2_d3d12_create() {
     D3D12_DESCRIPTOR_HEAP_DESC sh{}; sh.Type=D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV; sh.NumDescriptors=4096; sh.Flags=D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
     if(FAILED(ctx->device->CreateDescriptorHeap(&sh,IID_PPV_ARGS(&ctx->srvHeap)))) { CloseHandle(ctx->fenceEvent); delete ctx; return nullptr; }
     ctx->srvStride=ctx->device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    for(UINT i=0;i<NativeContext::FrameCount;++i) if(FAILED(ctx->device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,IID_PPV_ARGS(&ctx->frameAllocators[i])))){CloseHandle(ctx->fenceEvent);delete ctx;return nullptr;}
     return ctx;
 }
 
@@ -178,9 +183,11 @@ MOTOR2_API int motor2_d3d12_draw_quads(void* context, void* target, const Motor2
     auto* ctx=static_cast<NativeContext*>(context);
     HRESULT hr=EnsureQuadPipeline(ctx); if(FAILED(hr)) return hr;
     auto* tgt=static_cast<ComPtr<ID3D12Resource>*>(target);
-    ComPtr<ID3D12CommandAllocator> alloc; ComPtr<ID3D12GraphicsCommandList> list;
-    if(FAILED(hr=ctx->device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,IID_PPV_ARGS(&alloc)))) return hr;
-    if(FAILED(hr=ctx->device->CreateCommandList(0,D3D12_COMMAND_LIST_TYPE_DIRECT,alloc.Get(),ctx->pipelineState.Get(),IID_PPV_ARGS(&list)))) return hr;
+    const UINT slot=ctx->frameIndex++ % NativeContext::FrameCount; const UINT64 pending=ctx->frameFence[slot];
+    if(pending && ctx->fence->GetCompletedValue()<pending){if(FAILED(hr=ctx->fence->SetEventOnCompletion(pending,ctx->fenceEvent))) return hr; WaitForSingleObject(ctx->fenceEvent,INFINITE);}
+    auto* alloc=ctx->frameAllocators[slot].Get(); if(FAILED(hr=alloc->Reset())) return hr;
+    ComPtr<ID3D12GraphicsCommandList> list;
+    if(FAILED(hr=ctx->device->CreateCommandList(0,D3D12_COMMAND_LIST_TYPE_DIRECT,alloc,ctx->pipelineState.Get(),IID_PPV_ARGS(&list)))) return hr;
     auto rtv=ctx->rtvHeap->GetCPUDescriptorHandleForHeapStart(); list->OMSetRenderTargets(1,&rtv,FALSE,nullptr);
     auto td=(*tgt)->GetDesc(); D3D12_VIEWPORT vp{0,0,static_cast<float>(td.Width),static_cast<float>(td.Height),0,1}; D3D12_RECT sc{0,0,static_cast<LONG>(td.Width),static_cast<LONG>(td.Height)}; list->RSSetViewports(1,&vp); list->RSSetScissorRects(1,&sc);
     const float clear[4]={0,0,0,1}; list->ClearRenderTargetView(rtv,clear,0,nullptr);
@@ -194,7 +201,7 @@ MOTOR2_API int motor2_d3d12_draw_quads(void* context, void* target, const Motor2
         list->SetGraphicsRootDescriptorTable(1,gpu); list->DrawInstanced(6,1,0,0);
     }
     if(FAILED(hr=list->Close())) return hr; ID3D12CommandList* lists[]={list.Get()}; ctx->directQueue->ExecuteCommandLists(1,lists);
-    UINT64 fv=++ctx->fenceValue; if(FAILED(hr=ctx->directQueue->Signal(ctx->fence.Get(),fv))) return hr; if(ctx->fence->GetCompletedValue()<fv){if(FAILED(hr=ctx->fence->SetEventOnCompletion(fv,ctx->fenceEvent))) return hr; WaitForSingleObject(ctx->fenceEvent,INFINITE);} return S_OK;
+    UINT64 fv=++ctx->fenceValue; if(FAILED(hr=ctx->directQueue->Signal(ctx->fence.Get(),fv))) return hr; ctx->frameFence[slot]=fv; return S_OK;
 }
 
 MOTOR2_API int motor2_d3d12_end_frame(void* context, void* target) {
