@@ -46,6 +46,7 @@ MOTOR2_API int motor2_nvenc_probe(Motor2NvencProbeInfo* info);
 
 struct Motor2NvencSessionSettings { std::uint32_t width,height,fpsNum,fpsDen,bitrate; };
 MOTOR2_API void* motor2_nvenc_open_d3d12(void* d3d12Context, const Motor2NvencSessionSettings* settings);
+MOTOR2_API int motor2_nvenc_get_last_open_status();
 MOTOR2_API int motor2_nvenc_submit(void* session, void* renderTarget, std::int64_t pts100ns, std::uint64_t* submissionId);
 MOTOR2_API int motor2_nvenc_wait(void* session, std::uint64_t submissionId);
 MOTOR2_API int motor2_nvenc_drain(void* session);
