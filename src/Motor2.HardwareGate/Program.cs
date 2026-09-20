@@ -2,7 +2,8 @@ using System.Collections.Immutable;
 using SlideshowCreator.Motor2.Core;
 using System.Security.Cryptography;
 
-static void Fail(string message){Console.Error.WriteLine("FAIL: "+message);Environment.Exit(2);}
+static void Pause(){Console.WriteLine();Console.WriteLine("Apasa ENTER pentru inchidere...");Console.ReadLine();}
+static void Fail(string message){Console.Error.WriteLine("FAIL: "+message);Pause();Environment.Exit(2);}
 try
 {
     Console.WriteLine("Motor 2.0 NVENC Hardware Gate");
@@ -44,6 +45,7 @@ try
     var hash=Convert.ToHexString(SHA256.HashData(first));
     Console.WriteLine($"PASS: frames={frames}, h264Bytes={totalBytes}, firstSHA256={hash}");
     Console.WriteLine("PASS: D3D12 -> FP16 -> GPU BGRA -> NVENC H.264 -> completion -> release");
+    Pause();
     return 0;
 }
 catch(Exception ex){Fail(ex.ToString());return 2;}
