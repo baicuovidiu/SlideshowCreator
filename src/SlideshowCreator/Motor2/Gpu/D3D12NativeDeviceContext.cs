@@ -108,6 +108,14 @@ public sealed class D3D12NativeDeviceContext : ID3D12CompositorDevice
         return ValueTask.CompletedTask;
     }
 
+    public unsafe ValueTask<byte[]> ReadbackRgba16fAsync(object target, PixelSize size, CancellationToken ct)
+    {
+        EnsureReady(); ct.ThrowIfCancellationRequested(); var h=RequireHandle(target);
+        var bytes=checked(size.Width*size.Height*8); var data=new byte[bytes];
+        fixed(byte* p=data){var hr=Motor2Native.ReadbackRgba16f(_nativeContext,h,p,checked((uint)bytes)); if(hr<0) Marshal.ThrowExceptionForHR(hr);}
+        return ValueTask.FromResult(data);
+    }
+
     public ValueTask ReleaseRenderTargetAsync(object target, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
