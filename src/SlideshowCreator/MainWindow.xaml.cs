@@ -108,25 +108,27 @@ public partial class MainWindow : Window
         var dir = Path.Combine(Path.GetTempPath(), "SlideshowCreator", Guid.NewGuid().ToString("N")); Directory.CreateDirectory(dir);
         try
         {
-            // Salvage path: one FFmpeg render graph + one encode.
-            // This removes the old N-times H.264 encode + concat bottleneck.
+            if (Media.All(m => m.Type == "Foto"))
+            {
+                ExportPhotosSinglePass(dest, dir);
+                return;
+            }
+
+            // Mixed photo/video path. It remains single-encode, but the large photo-only
+            // benchmark uses ffconcat below so 120+ paths never overflow Windows command-line limits.
             var inputs = new StringBuilder();
             var filters = new StringBuilder();
             var concatInputs = new StringBuilder();
             int i = 0;
             foreach (var m in Media)
             {
-                if (m.Type == "Foto")
-                    inputs.Append($" -loop 1 -t {F(m.Duration)} -i \"{m.Path}\"");
-                else
-                    inputs.Append($" -ss {F(m.TrimIn)} -t {F(m.Duration)} -i \"{m.Path}\"");
-
+                if (m.Type == "Foto") inputs.Append($" -loop 1 -t {F(m.Duration)} -i \"{m.Path}\"");
+                else inputs.Append($" -ss {F(m.TrimIn)} -t {F(m.Duration)} -i \"{m.Path}\"");
                 filters.Append($"[{i}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,fps=30,format=yuv420p,setpts=PTS-STARTPTS[v{i}];");
                 concatInputs.Append($"[v{i}]");
                 i++;
             }
             filters.Append($"{concatInputs}concat=n={Media.Count}:v=1:a=0[outv]");
-
             var musicIndex = Media.Count;
             var audioInput = music == null ? "" : $" -stream_loop -1 -i \"{music}\"";
             var audioMap = music == null ? " -an" : $" -map {musicIndex}:a -c:a aac -b:a 256k -shortest";
@@ -135,6 +137,27 @@ public partial class MainWindow : Window
         finally { try { Directory.Delete(dir, true); } catch { } }
     }
 
+    void ExportPhotosSinglePass(string dest, string dir)
+    {
+        var list = Path.Combine(dir, "photos.ffconcat");
+        using (var w = new StreamWriter(list, false, new UTF8Encoding(false)))
+        {
+            w.WriteLine("ffconcat version 1.0");
+            foreach (var m in Media)
+            {
+                w.WriteLine("file '" + FfconcatPath(m.Path) + "'");
+                w.WriteLine("duration " + F(m.Duration));
+            }
+            // concat demuxer applies the final duration only when a following file exists.
+            w.WriteLine("file '" + FfconcatPath(Media[^1].Path) + "'");
+        }
+        var vf = "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,fps=30,format=yuv420p";
+        var audioInput = music == null ? "" : $" -stream_loop -1 -i \"{music}\"";
+        var audioMap = music == null ? " -an" : " -map 1:a -c:a aac -b:a 256k -shortest";
+        Ffmpeg($"-y -f concat -safe 0 -i \"{list}\"{audioInput} -map 0:v{audioMap} -vf \"{vf}\" -c:v h264_nvenc -preset p4 -cq 19 -b:v 0 -movflags +faststart \"{dest}\"");
+    }
+
+    static string FfconcatPath(string path) => path.Replace("'", "'\\''");
     static string F(double n) => n.ToString("0.###", CultureInfo.InvariantCulture);
     static void Ffmpeg(string args) { var t = Run("ffmpeg.exe", args, out var c); if (c != 0) throw new Exception("FFmpeg a oprit exportul.\n\n" + (t.Length > 1600 ? t[^1600..] : t)); }
     static string Run(string exe, string args, out int code)
