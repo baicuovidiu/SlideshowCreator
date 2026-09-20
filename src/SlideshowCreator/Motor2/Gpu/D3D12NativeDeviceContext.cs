@@ -73,12 +73,23 @@ public sealed class D3D12NativeDeviceContext : ID3D12CompositorDevice
         var hr=Motor2Native.BeginFrame(_nativeContext,h); if(hr<0) Marshal.ThrowExceptionForHR(hr); return ValueTask.CompletedTask;
     }
 
-    public unsafe ValueTask DrawTexturedQuadAsync(object target, GpuDrawCommand command, CancellationToken ct)
+    public unsafe ValueTask DrawTexturedQuadsAsync(object target, IReadOnlyList<GpuDrawCommand> commands, CancellationToken ct)
     {
         EnsureReady(); ct.ThrowIfCancellationRequested(); var h=RequireHandle(target);
-        if(command.Texture.NativeHandle is not nint texture || texture==0) throw new ArgumentException("GPU texture has no native D3D12 handle.");
-        var m=command.Transform; var q=new Motor2Native.DrawQuad{Texture=texture,M11=m.M11,M12=m.M12,M21=m.M21,M22=m.M22,M31=m.M31,M32=m.M32,Opacity=command.Opacity,Z=command.Z};
-        var hr=Motor2Native.DrawQuads(_nativeContext,h,&q,1); if(hr<0) Marshal.ThrowExceptionForHR(hr); return ValueTask.CompletedTask;
+        if(commands.Count==0) return ValueTask.CompletedTask;
+        var native=new Motor2Native.DrawQuad[commands.Count];
+        for(var i=0;i<commands.Count;i++)
+        {
+            var command=commands[i];
+            if(command.Texture.NativeHandle is not nint texture || texture==0) throw new ArgumentException("GPU texture has no native D3D12 handle.");
+            var m=command.Transform;
+            native[i]=new Motor2Native.DrawQuad{Texture=texture,M11=m.M11,M12=m.M12,M21=m.M21,M22=m.M22,M31=m.M31,M32=m.M32,Opacity=command.Opacity,Z=command.Z};
+        }
+        fixed(Motor2Native.DrawQuad* p=native)
+        {
+            var hr=Motor2Native.DrawQuads(_nativeContext,h,p,checked((uint)native.Length)); if(hr<0) Marshal.ThrowExceptionForHR(hr);
+        }
+        return ValueTask.CompletedTask;
     }
 
     public ValueTask EndFrameAsync(object target, CancellationToken ct)
