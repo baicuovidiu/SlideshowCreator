@@ -33,18 +33,28 @@ public sealed class PipelinedRenderScheduler : IRenderScheduler
                 var texture=await _gpu.GetOrUploadAsync(req,decoded,ct);
                 textures[req.Asset]=texture;
             }
-            object composed;
-            using(_telemetry.Measure("gpu.compose"))
-                composed=await _graphics.ComposeAsync(plan,textures,ct);
-            using(_telemetry.Measure("encode.submit"))
-                await _encoder.EncodeAsync(composed,pts,ct);
-            // A compositor-owned render target cannot be recycled/released until the encoder
-            // proves it has finished consuming that exact GPU surface.
-            if(_encoder is IGpuFrameCompletionSource completion)
+            object? composed=null;
+            var submitted=false;
+            try
+            {
+                using(_telemetry.Measure("gpu.compose"))
+                    composed=await _graphics.ComposeAsync(plan,textures,ct);
+                using(_telemetry.Measure("encode.submit"))
+                    await _encoder.EncodeAsync(composed,pts,ct);
+                submitted=true;
+                if(_encoder is not IGpuFrameCompletionSource completion)
+                    throw new InvalidOperationException("GPU export requires an explicit frame-completion contract.");
                 await completion.WaitForFrameCompletionAsync(composed,ct);
-            if(_graphics is D3D12Compositor compositor)
-                await compositor.ReleaseComposedFrameAsync(composed,ct);
-            _telemetry.Counter("render.frame",1);
+                submitted=false;
+                _telemetry.Counter("render.frame",1);
+            }
+            finally
+            {
+                // Never free a surface still owned by an asynchronous encoder.
+                // On a failed/cancelled submitted frame, session disposal/drain owns recovery.
+                if(composed is not null && !submitted && _graphics is D3D12Compositor compositor)
+                    await compositor.ReleaseComposedFrameAsync(composed,CancellationToken.None);
+            }
             await _gpu.TrimAsync(ct);
         }
         await _encoder.FinalizeAsync(ct);
