@@ -124,7 +124,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $launcher=Join-Path $pwd 'artifacts\Motor2-HardwareGate-ONE-EXE\Motor2_HardwareGate_RTX4060.exe'
-          $tag='motor2-hardware-gate-174'
+          $tag='motor2-hardware-gate-179'
           gh release view $tag --repo ${{ github.repository }} *> $null
           if ($LASTEXITCODE -ne 0) {
             gh release create $tag $launcher --repo ${{ github.repository }} --target ${{ github.sha }} --title 'Motor 2.0 Hardware Gate RTX 4060' --notes 'Hardware Gate 900-frame validation build. Not the slideshow application.' --prerelease
