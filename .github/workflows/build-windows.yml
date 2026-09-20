@@ -74,7 +74,7 @@ jobs:
               <PublishSingleFile>true</PublishSingleFile><EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
               <AssemblyName>Motor2_HardwareGate_RTX4060</AssemblyName>
             </PropertyGroup>
-            <ItemGroup><EmbeddedResource Include="payload.zip" /></ItemGroup>
+            <ItemGroup><EmbeddedResource Include="payload.zip" LogicalName="payload.zip" /></ItemGroup>
           </Project>
           '@ | Set-Content (Join-Path $proj 'OneExeLauncher.csproj')
           @'
@@ -88,7 +88,7 @@ jobs:
               var root=Path.Combine(Path.GetTempPath(),"Motor2HardwareGate_"+Guid.NewGuid().ToString("N"));
               Directory.CreateDirectory(root);
               try {
-                using var s=Assembly.GetExecutingAssembly().GetManifestResourceStream("Motor2_HardwareGate_RTX4060.payload.zip") ?? throw new Exception("Embedded payload missing.");
+                using var s=Assembly.GetExecutingAssembly().GetManifestResourceStream("payload.zip") ?? throw new Exception("Embedded payload missing.");
                 using var z=new ZipArchive(s,ZipArchiveMode.Read);
                 z.ExtractToDirectory(root);
                 var exe=Path.Combine(root,"Motor2.HardwareGate.exe");
@@ -110,6 +110,9 @@ jobs:
           dotnet publish (Join-Path $proj 'OneExeLauncher.csproj') -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o (Join-Path $pwd 'artifacts\Motor2-HardwareGate-ONE-EXE')
           $launcher=Join-Path $pwd 'artifacts\Motor2-HardwareGate-ONE-EXE\Motor2_HardwareGate_RTX4060.exe'
           if (-not (Test-Path $launcher)) { throw 'FAIL: ONE-EXE launcher missing' }
+          $dll=[System.Reflection.Assembly]::LoadFile($launcher)
+          $names=$dll.GetManifestResourceNames()
+          if ($names -notcontains 'payload.zip') { throw "FAIL: embedded payload resource missing. Found: $($names -join ', ')" }
           Get-FileHash $launcher -Algorithm SHA256
           if ((Get-Item $launcher).Length -lt 1000000) { throw 'FAIL: ONE-EXE launcher unexpectedly small' }
 
@@ -119,7 +122,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $launcher=Join-Path $pwd 'artifacts\Motor2-HardwareGate-ONE-EXE\Motor2_HardwareGate_RTX4060.exe'
-          $tag='motor2-hardware-gate-170'
+          $tag='motor2-hardware-gate-172'
           gh release view $tag --repo ${{ github.repository }} *> $null
           if ($LASTEXITCODE -ne 0) {
             gh release create $tag $launcher --repo ${{ github.repository }} --target ${{ github.sha }} --title 'Motor 2.0 Hardware Gate RTX 4060' --notes 'Hardware Gate 900-frame validation build. Not the slideshow application.' --prerelease
