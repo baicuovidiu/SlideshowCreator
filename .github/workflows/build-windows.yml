@@ -110,9 +110,23 @@ jobs:
           dotnet publish (Join-Path $proj 'OneExeLauncher.csproj') -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o (Join-Path $pwd 'artifacts\Motor2-HardwareGate-ONE-EXE')
           $launcher=Join-Path $pwd 'artifacts\Motor2-HardwareGate-ONE-EXE\Motor2_HardwareGate_RTX4060.exe'
           if (-not (Test-Path $launcher)) { throw 'FAIL: ONE-EXE launcher missing' }
-          $dll=[System.Reflection.Assembly]::LoadFile($launcher)
-          $names=$dll.GetManifestResourceNames()
-          if ($names -notcontains 'payload.zip') { throw "FAIL: embedded payload resource missing. Found: $($names -join ', ')" }
+          $verifyProj = Join-Path $pwd 'artifacts\VerifyEmbeddedPayload'
+          New-Item -ItemType Directory -Force -Path $verifyProj | Out-Null
+          @'
+          <Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>
+          '@ | Set-Content (Join-Path $verifyProj 'VerifyEmbeddedPayload.csproj')
+          @'
+          using System.Reflection;
+          var asm=Assembly.LoadFrom(args[0]);
+          var names=asm.GetManifestResourceNames();
+          if(!names.Contains("payload.zip")) { Console.Error.WriteLine("FAIL resources: "+string.Join(",",names)); return 2; }
+          using var s=asm.GetManifestResourceStream("payload.zip");
+          if(s is null || s.Length<1024) { Console.Error.WriteLine("FAIL payload stream"); return 3; }
+          Console.WriteLine($"Embedded payload OK: {s.Length} bytes");
+          return 0;
+          '@ | Set-Content (Join-Path $verifyProj 'Program.cs')
+          dotnet run --project (Join-Path $verifyProj 'VerifyEmbeddedPayload.csproj') -c Release -- $launcher
+          if ($LASTEXITCODE -ne 0) { throw 'FAIL: embedded payload verification failed' }
           Get-FileHash $launcher -Algorithm SHA256
           if ((Get-Item $launcher).Length -lt 1000000) { throw 'FAIL: ONE-EXE launcher unexpectedly small' }
 
@@ -122,7 +136,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $launcher=Join-Path $pwd 'artifacts\Motor2-HardwareGate-ONE-EXE\Motor2_HardwareGate_RTX4060.exe'
-          $tag='motor2-hardware-gate-172'
+          $tag='motor2-hardware-gate-173'
           gh release view $tag --repo ${{ github.repository }} *> $null
           if ($LASTEXITCODE -ne 0) {
             gh release create $tag $launcher --repo ${{ github.repository }} --target ${{ github.sha }} --title 'Motor 2.0 Hardware Gate RTX 4060' --notes 'Hardware Gate 900-frame validation build. Not the slideshow application.' --prerelease
