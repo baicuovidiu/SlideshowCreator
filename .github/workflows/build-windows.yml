@@ -101,6 +101,8 @@ jobs:
                 Console.WriteLine("Apasa ENTER pentru inchidere...");
                 Console.ReadLine();
                 return 2;
+              } finally {
+                try { if(Directory.Exists(root)) Directory.Delete(root,true); } catch { }
               }
             }
           }
@@ -109,6 +111,7 @@ jobs:
           $launcher=Join-Path $pwd 'artifacts\Motor2-HardwareGate-ONE-EXE\Motor2_HardwareGate_RTX4060.exe'
           if (-not (Test-Path $launcher)) { throw 'FAIL: ONE-EXE launcher missing' }
           Get-FileHash $launcher -Algorithm SHA256
+          if ((Get-Item $launcher).Length -lt 1000000) { throw 'FAIL: ONE-EXE launcher unexpectedly small' }
 
       - name: Upload ONE-EXE Hardware Gate
         uses: actions/upload-artifact@v4
