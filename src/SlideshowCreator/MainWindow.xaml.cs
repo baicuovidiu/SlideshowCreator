@@ -158,21 +158,26 @@ public partial class MainWindow : Window
 
     void ExportPhotosSinglePass(string dest, string dir, string videoEncoder)
     {
-        var list = Path.Combine(dir, "photos.ffconcat");
-        using (var w = new StreamWriter(list, false, new UTF8Encoding(false)))
+        var inputs = new StringBuilder();
+        var filters = new StringBuilder();
+        var concatInputs = new StringBuilder();
+        for (int i = 0; i < Media.Count; i++)
         {
-            w.WriteLine("ffconcat version 1.0");
-            foreach (var m in Media)
-            {
-                w.WriteLine("file '" + FfconcatPath(m.Path) + "'");
-                w.WriteLine("duration " + F(m.Duration));
-            }
-            w.WriteLine("file '" + FfconcatPath(Media[^1].Path) + "'");
+            var m = Media[i];
+            inputs.Append($" -loop 1 -t {F(m.Duration)} -i \"{m.Path}\"");
+            filters.Append($"[{i}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,fps=30,format=yuv420p,setpts=PTS-STARTPTS[v{i}];");
+            concatInputs.Append($"[v{i}]");
         }
-        var vf = "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,fps=30,format=yuv420p";
+        filters.Append($"{concatInputs}concat=n={Media.Count}:v=1:a=0[outv]");
+        var filterScript = Path.Combine(dir, "photos-filter.txt");
+        File.WriteAllText(filterScript, filters.ToString(), new UTF8Encoding(false));
+        var musicIndex = Media.Count;
         var audioInput = music == null ? "" : $" -stream_loop -1 -i \"{music}\"";
-        var audioMap = music == null ? " -an" : " -map 1:a -c:a aac -b:a 256k -shortest";
-        Ffmpeg($"-y -f concat -safe 0 -i \"{list}\"{audioInput} -map 0:v{audioMap} -vf \"{vf}\" {videoEncoder} -movflags +faststart \"{dest}\"");
+        var audioMap = music == null ? " -an" : $" -map {musicIndex}:a -c:a aac -b:a 256k -shortest";
+        var command = $"-y{inputs}{audioInput} -filter_complex_script \"{filterScript}\" -map \"[outv]\"{audioMap} {videoEncoder} -movflags +faststart \"{dest}\"";
+        if (command.Length > 30000)
+            throw new Exception("Exportul conține prea multe căi de fișiere pentru limita Windows. Mută temporar fotografiile într-un folder cu o cale mai scurtă.");
+        Ffmpeg(command);
     }
 
     static string SelectVideoEncoder(string dir)
@@ -202,7 +207,6 @@ public partial class MainWindow : Window
             throw new Exception($"Export invalid: verificarea ffprobe a eșuat (durată așteptată {F(expectedDuration)}s).\n" + output);
     }
 
-    static string FfconcatPath(string path) => path.Replace("'", "'\\''");
     static string F(double n) => n.ToString("0.###", CultureInfo.InvariantCulture);
     static void Ffmpeg(string args) { var t = Run("ffmpeg.exe", args, out var c); if (c != 0) throw new Exception("FFmpeg a oprit exportul.\n\n" + (t.Length > 1600 ? t[^1600..] : t)); }
     static string Run(string exe, string args, out int code)
@@ -235,5 +239,12 @@ public partial class MainWindow : Window
     }
 
     void Window_PreviewDragOver(object sender, DragEventArgs e) { e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None; e.Handled = true; }
-    async void Window_Drop(object sender, DragEventArgs e) { if (e.Data.GetData(DataFormats.FileDrop) is string[] files) await ImportFilesAsync(files); }
+    async void Window_Drop(object sender, DragEventArgs e) { if (e.Data.GetData(DataFormats.FileDrop) is string[] f) await ImportFilesAsync(f); }
+}
+
+public class MediaItem
+{
+    public string Path { get; set; } = ""; public string Name => System.IO.Path.GetFileName(Path); public string Type { get; set; } = ""; public DateTime Date { get; set; }
+    public double Duration { get; set; } = 4; public double TrimIn { get; set; } public bool Mute { get; set; } public ImageSource? Thumbnail { get; set; }
+    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged; public void Changed(string n) => PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(n));
 }
