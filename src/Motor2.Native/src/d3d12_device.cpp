@@ -310,7 +310,7 @@ struct NativeNvencSession {
     NativeContext* d3d=nullptr;
     Motor2NvencSessionSettings settings{};
     std::uint64_t nextId=1;
-    struct Submission { NV_ENC_REGISTERED_PTR registered=nullptr; NV_ENC_INPUT_PTR mapped=nullptr; NV_ENC_OUTPUT_PTR bitstream=nullptr; bool complete=false; };
+    struct Submission { NV_ENC_REGISTERED_PTR registered=nullptr; NV_ENC_INPUT_PTR mapped=nullptr; NV_ENC_OUTPUT_PTR bitstream=nullptr; std::vector<std::uint8_t> bytes; bool complete=false; };
     std::unordered_map<std::uint64_t,Submission> submissions;
 };
 static GUID Motor2H264Preset(){ return NV_ENC_PRESET_P4_GUID; }
@@ -358,7 +358,7 @@ MOTOR2_API int motor2_nvenc_submit(void* session,void* renderTarget,std::int64_t
     NV_ENC_CREATE_BITSTREAM_BUFFER bb{}; bb.version=NV_ENC_CREATE_BITSTREAM_BUFFER_VER; if(s->api.nvEncCreateBitstreamBuffer(s->encoder,&bb)!=NV_ENC_SUCCESS){s->api.nvEncUnmapInputResource(s->encoder,mr.mappedResource);s->api.nvEncUnregisterResource(s->encoder,rr.registeredResource);return E_FAIL;}
     NV_ENC_PIC_PARAMS pp{}; pp.version=NV_ENC_PIC_PARAMS_VER; pp.inputBuffer=mr.mappedResource; pp.bufferFmt=mr.mappedBufferFmt; pp.inputWidth=s->settings.width; pp.inputHeight=s->settings.height; pp.outputBitstream=bb.bitstreamBuffer; pp.inputTimeStamp=pts100ns; pp.pictureStruct=NV_ENC_PIC_STRUCT_FRAME;
     auto st=s->api.nvEncEncodePicture(s->encoder,&pp); if(st!=NV_ENC_SUCCESS && st!=NV_ENC_ERR_NEED_MORE_INPUT){s->api.nvEncDestroyBitstreamBuffer(s->encoder,bb.bitstreamBuffer);s->api.nvEncUnmapInputResource(s->encoder,mr.mappedResource);s->api.nvEncUnregisterResource(s->encoder,rr.registeredResource);return E_FAIL;}
-    auto id=s->nextId++; s->submissions[id]={rr.registeredResource,mr.mappedResource,bb.bitstreamBuffer,false}; *submissionId=id; return S_OK;
+    auto id=s->nextId++; s->submissions[id]={rr.registeredResource,mr.mappedResource,bb.bitstreamBuffer,{},false}; *submissionId=id; return S_OK;
 #endif
 }
 MOTOR2_API int motor2_nvenc_wait(void* session,std::uint64_t submissionId){
@@ -366,7 +366,7 @@ MOTOR2_API int motor2_nvenc_wait(void* session,std::uint64_t submissionId){
  return E_NOTIMPL;
 #else
  auto* s=static_cast<NativeNvencSession*>(session); if(!s)return E_INVALIDARG; auto it=s->submissions.find(submissionId); if(it==s->submissions.end())return E_INVALIDARG;
- NV_ENC_LOCK_BITSTREAM lk{}; lk.version=NV_ENC_LOCK_BITSTREAM_VER; lk.outputBitstream=it->second.bitstream; lk.doNotWait=0; if(s->api.nvEncLockBitstream(s->encoder,&lk)!=NV_ENC_SUCCESS)return E_FAIL; s->api.nvEncUnlockBitstream(s->encoder,it->second.bitstream); it->second.complete=true; return S_OK;
+ if(it->second.complete)return S_OK; NV_ENC_LOCK_BITSTREAM lk{}; lk.version=NV_ENC_LOCK_BITSTREAM_VER; lk.outputBitstream=it->second.bitstream; lk.doNotWait=0; if(s->api.nvEncLockBitstream(s->encoder,&lk)!=NV_ENC_SUCCESS)return E_FAIL; auto* p=static_cast<const std::uint8_t*>(lk.bitstreamBufferPtr); it->second.bytes.assign(p,p+lk.bitstreamSizeInBytes); s->api.nvEncUnlockBitstream(s->encoder,it->second.bitstream); it->second.complete=true; return S_OK;
 #endif
 }
 MOTOR2_API int motor2_nvenc_get_bitstream(void* session,std::uint64_t submissionId,void* destination,std::uint32_t capacity,std::uint32_t* written){
@@ -374,7 +374,7 @@ MOTOR2_API int motor2_nvenc_get_bitstream(void* session,std::uint64_t submission
  return E_NOTIMPL;
 #else
  auto* s=static_cast<NativeNvencSession*>(session); if(!s||!written)return E_INVALIDARG; auto it=s->submissions.find(submissionId); if(it==s->submissions.end())return E_INVALIDARG;
- NV_ENC_LOCK_BITSTREAM lk{}; lk.version=NV_ENC_LOCK_BITSTREAM_VER; lk.outputBitstream=it->second.bitstream; lk.doNotWait=0; if(s->api.nvEncLockBitstream(s->encoder,&lk)!=NV_ENC_SUCCESS)return E_FAIL; *written=lk.bitstreamSizeInBytes; if(!destination||capacity<*written){s->api.nvEncUnlockBitstream(s->encoder,it->second.bitstream);return HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);} std::memcpy(destination,lk.bitstreamBufferPtr,*written); s->api.nvEncUnlockBitstream(s->encoder,it->second.bitstream); it->second.complete=true; return S_OK;
+ if(!it->second.complete){auto hr=motor2_nvenc_wait(session,submissionId);if(FAILED(hr))return hr;} *written=static_cast<std::uint32_t>(it->second.bytes.size()); if(!destination||capacity<*written)return HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER); if(*written)std::memcpy(destination,it->second.bytes.data(),*written); if(it->second.mapped)s->api.nvEncUnmapInputResource(s->encoder,it->second.mapped); if(it->second.registered)s->api.nvEncUnregisterResource(s->encoder,it->second.registered); if(it->second.bitstream)s->api.nvEncDestroyBitstreamBuffer(s->encoder,it->second.bitstream); s->submissions.erase(it); return S_OK;
 #endif
 }
 MOTOR2_API int motor2_nvenc_drain(void* session){
