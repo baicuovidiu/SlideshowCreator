@@ -6,7 +6,7 @@ on:
     branches: [ 'motor-2.0' ]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   compile-gate:
@@ -112,6 +112,21 @@ jobs:
           if (-not (Test-Path $launcher)) { throw 'FAIL: ONE-EXE launcher missing' }
           Get-FileHash $launcher -Algorithm SHA256
           if ((Get-Item $launcher).Length -lt 1000000) { throw 'FAIL: ONE-EXE launcher unexpectedly small' }
+
+      - name: Publish DIRECT EXE as prerelease asset
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $launcher=Join-Path $pwd 'artifacts\Motor2-HardwareGate-ONE-EXE\Motor2_HardwareGate_RTX4060.exe'
+          $tag='motor2-hardware-gate-170'
+          gh release view $tag --repo ${{ github.repository }} *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag $launcher --repo ${{ github.repository }} --target ${{ github.sha }} --title 'Motor 2.0 Hardware Gate RTX 4060' --notes 'Hardware Gate 900-frame validation build. Not the slideshow application.' --prerelease
+          } else {
+            gh release upload $tag $launcher --repo ${{ github.repository }} --clobber
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'FAIL: direct EXE release publication failed' }
 
       - name: Upload ONE-EXE Hardware Gate
         uses: actions/upload-artifact@v4
