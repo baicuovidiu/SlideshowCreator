@@ -34,6 +34,18 @@ jobs:
           dotnet restore .\src\Motor2.HardwareGate\Motor2.HardwareGate.csproj
           dotnet build .\src\Motor2.HardwareGate\Motor2.HardwareGate.csproj -c Release --no-restore
 
+      - name: Publish self-contained hardware gate
+        shell: pwsh
+        run: |
+          dotnet publish .\src\Motor2.HardwareGate\Motor2.HardwareGate.csproj -c Release -r win-x64 --self-contained true -o .\artifacts\Motor2-HardwareGate
+
+      - name: Upload hardware gate managed package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Motor2-HardwareGate-win-x64-managed
+          path: artifacts/Motor2-HardwareGate
+          if-no-files-found: error
+
       - name: Architecture guard
         shell: pwsh
         run: |
