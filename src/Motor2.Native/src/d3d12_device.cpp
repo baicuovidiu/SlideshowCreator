@@ -101,3 +101,27 @@ MOTOR2_API int motor2_d3d12_upload_rgba8(void* context, void* resource, const vo
 
 MOTOR2_API void motor2_d3d12_release_resource(void* resource) { delete static_cast<ComPtr<ID3D12Resource>*>(resource); }
 
+
+MOTOR2_API void* motor2_d3d12_create_render_target(void* context, std::uint32_t width, std::uint32_t height) {
+    auto* ctx=static_cast<NativeContext*>(context); if(!ctx||!width||!height) return nullptr;
+    auto* target=new ComPtr<ID3D12Resource>();
+    D3D12_HEAP_PROPERTIES heap{}; heap.Type=D3D12_HEAP_TYPE_DEFAULT;
+    D3D12_RESOURCE_DESC d{}; d.Dimension=D3D12_RESOURCE_DIMENSION_TEXTURE2D; d.Width=width; d.Height=height; d.DepthOrArraySize=1; d.MipLevels=1; d.Format=DXGI_FORMAT_R16G16B16A16_FLOAT; d.SampleDesc.Count=1; d.Layout=D3D12_TEXTURE_LAYOUT_UNKNOWN; d.Flags=D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+    D3D12_CLEAR_VALUE clear{}; clear.Format=d.Format; clear.Color[3]=1.0f;
+    if(FAILED(ctx->device->CreateCommittedResource(&heap,D3D12_HEAP_FLAG_NONE,&d,D3D12_RESOURCE_STATE_RENDER_TARGET,&clear,IID_PPV_ARGS(target->ReleaseAndGetAddressOf())))){delete target;return nullptr;} return target;
+}
+
+MOTOR2_API int motor2_d3d12_begin_frame(void* context, void* target) {
+    return (context&&target) ? S_OK : E_INVALIDARG;
+}
+
+MOTOR2_API int motor2_d3d12_draw_quads(void* context, void* target, const Motor2DrawQuad* commands, std::uint32_t count) {
+    if(!context||!target||(count&&!commands)) return E_INVALIDARG;
+    // ABI and retained draw-list boundary are live. PSO/root signature/descriptor heap follow next.
+    // No CPU readback and no media re-decode are permitted here.
+    return S_OK;
+}
+
+MOTOR2_API int motor2_d3d12_end_frame(void* context, void* target) {
+    return (context&&target) ? S_OK : E_INVALIDARG;
+}
