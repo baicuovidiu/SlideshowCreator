@@ -8,13 +8,19 @@ public sealed class WindowsHardwareProfiler : IHardwareProfiler
     public async ValueTask<HardwareCapabilities> ProbeAsync(CancellationToken ct)
     {
         var nvidia = await TryNvidiaSmiAsync(ct);
-        // Gate A reports only capabilities we can actually prove. D3D12/CUDA probing
-        // will be upgraded to native API checks; no capability is inferred from a brand name.
+        var d3d12 = TryD3D12Probe();
         return new HardwareCapabilities(
-            nvidia?.Name ?? "Windows graphics adapter (native probe pending)",
-            nvidia?.VramBytes ?? 0,
-            D3D12:false, Cuda:false, NvDec:false, NvEnc:false,
+            d3d12?.Name ?? nvidia?.Name ?? "Windows graphics adapter",
+            d3d12?.VramBytes ?? nvidia?.VramBytes ?? 0,
+            D3D12:d3d12 is not null, Cuda:false, NvDec:false, NvEnc:false,
             ImmutableArray<string>.Empty, ImmutableArray<string>.Empty);
+    }
+
+    private static unsafe (string Name,long VramBytes)? TryD3D12Probe()
+    {
+        if(!OperatingSystem.IsWindows()) return null;
+        try { Motor2Native.AdapterInfo info=default; var hr=Motor2Native.Probe(&info); return hr>=0 ? (info.GetName(),checked((long)info.DedicatedVideoMemory)) : null; }
+        catch { return null; }
     }
 
     private static async Task<(string Name,long VramBytes)?> TryNvidiaSmiAsync(CancellationToken ct)
