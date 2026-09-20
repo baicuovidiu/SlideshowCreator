@@ -25,6 +25,7 @@ struct NativeContext {
     ComPtr<ID3D12DescriptorHeap> srvHeap;
     UINT rtvStride = 0;
     UINT srvStride = 0;
+    UINT nextSrv = 0;
 };
 
 static HRESULT SelectAdapter(IDXGIFactory6* factory, IDXGIAdapter1** selected) {
@@ -94,6 +95,11 @@ MOTOR2_API void* motor2_d3d12_create_texture_rgba8(void* context, std::uint32_t 
     D3D12_HEAP_PROPERTIES heap{}; heap.Type = D3D12_HEAP_TYPE_DEFAULT;
     D3D12_RESOURCE_DESC d{}; d.Dimension=D3D12_RESOURCE_DIMENSION_TEXTURE2D; d.Width=width; d.Height=height; d.DepthOrArraySize=1; d.MipLevels=1; d.Format=DXGI_FORMAT_R8G8B8A8_UNORM; d.SampleDesc.Count=1; d.Layout=D3D12_TEXTURE_LAYOUT_UNKNOWN;
     if (FAILED(ctx->device->CreateCommittedResource(&heap,D3D12_HEAP_FLAG_NONE,&d,D3D12_RESOURCE_STATE_COPY_DEST,nullptr,IID_PPV_ARGS(texture->ReleaseAndGetAddressOf())))) { delete texture; return nullptr; }
+    if(ctx->nextSrv>=4096){delete texture;return nullptr;}
+    D3D12_SHADER_RESOURCE_VIEW_DESC sv{}; sv.Format=DXGI_FORMAT_R8G8B8A8_UNORM; sv.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2D; sv.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING; sv.Texture2D.MipLevels=1;
+    auto cpu=ctx->srvHeap->GetCPUDescriptorHandleForHeapStart(); cpu.ptr+=static_cast<SIZE_T>(ctx->nextSrv)*ctx->srvStride;
+    ctx->device->CreateShaderResourceView(texture->Get(),&sv,cpu);
+    ++ctx->nextSrv;
     return texture;
 }
 
@@ -162,8 +168,23 @@ MOTOR2_API int motor2_d3d12_draw_quads(void* context, void* target, const Motor2
     if(!context||!target||(count&&!commands)) return E_INVALIDARG;
     auto* ctx=static_cast<NativeContext*>(context);
     HRESULT hr=EnsureQuadPipeline(ctx); if(FAILED(hr)) return hr;
-    // Pipeline/root signature/shaders are now real. Descriptor heap + RTV command recording follow next.
-    return S_OK;
+    auto* tgt=static_cast<ComPtr<ID3D12Resource>*>(target);
+    ComPtr<ID3D12CommandAllocator> alloc; ComPtr<ID3D12GraphicsCommandList> list;
+    if(FAILED(hr=ctx->device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,IID_PPV_ARGS(&alloc)))) return hr;
+    if(FAILED(hr=ctx->device->CreateCommandList(0,D3D12_COMMAND_LIST_TYPE_DIRECT,alloc.Get(),ctx->pipelineState.Get(),IID_PPV_ARGS(&list)))) return hr;
+    auto rtv=ctx->rtvHeap->GetCPUDescriptorHandleForHeapStart(); list->OMSetRenderTargets(1,&rtv,FALSE,nullptr);
+    auto td=(*tgt)->GetDesc(); D3D12_VIEWPORT vp{0,0,static_cast<float>(td.Width),static_cast<float>(td.Height),0,1}; D3D12_RECT sc{0,0,static_cast<LONG>(td.Width),static_cast<LONG>(td.Height)}; list->RSSetViewports(1,&vp); list->RSSetScissorRects(1,&sc);
+    const float clear[4]={0,0,0,1}; list->ClearRenderTargetView(rtv,clear,0,nullptr);
+    list->SetGraphicsRootSignature(ctx->rootSignature.Get()); ID3D12DescriptorHeap* heaps[]={ctx->srvHeap.Get()}; list->SetDescriptorHeaps(1,heaps); list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    for(std::uint32_t i=0;i<count;++i){
+        const auto& q=commands[i]; if(!q.texture) continue;
+        float constants[8]={q.m11,q.m12,q.m21,q.m22,q.m31,q.m32,q.z,q.opacity};
+        list->SetGraphicsRoot32BitConstants(0,8,constants,0);
+        auto gpu=ctx->srvHeap->GetGPUDescriptorHandleForHeapStart(); gpu.ptr+=static_cast<UINT64>(i)*ctx->srvStride;
+        list->SetGraphicsRootDescriptorTable(1,gpu); list->DrawInstanced(6,1,0,0);
+    }
+    if(FAILED(hr=list->Close())) return hr; ID3D12CommandList* lists[]={list.Get()}; ctx->directQueue->ExecuteCommandLists(1,lists);
+    UINT64 fv=++ctx->fenceValue; if(FAILED(hr=ctx->directQueue->Signal(ctx->fence.Get(),fv))) return hr; if(ctx->fence->GetCompletedValue()<fv){if(FAILED(hr=ctx->fence->SetEventOnCompletion(fv,ctx->fenceEvent))) return hr; WaitForSingleObject(ctx->fenceEvent,INFINITE);} return S_OK;
 }
 
 MOTOR2_API int motor2_d3d12_end_frame(void* context, void* target) {
