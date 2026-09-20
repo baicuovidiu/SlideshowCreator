@@ -76,7 +76,7 @@ public sealed class D3D12NativeDeviceContext : ID3D12CompositorDevice
     public unsafe ValueTask DrawTexturedQuadsAsync(object target, IReadOnlyList<GpuDrawCommand> commands, CancellationToken ct)
     {
         EnsureReady(); ct.ThrowIfCancellationRequested(); var h=RequireHandle(target);
-        if(commands.Count==0) return ValueTask.CompletedTask;
+        // Native draw also owns clear/submission, so an empty scene must still submit a clear frame.
         var native=new Motor2Native.DrawQuad[commands.Count];
         for(var i=0;i<commands.Count;i++)
         {
@@ -85,7 +85,11 @@ public sealed class D3D12NativeDeviceContext : ID3D12CompositorDevice
             var m=command.Transform;
             native[i]=new Motor2Native.DrawQuad{Texture=texture,M11=m.M11,M12=m.M12,M21=m.M21,M22=m.M22,M31=m.M31,M32=m.M32,Opacity=command.Opacity,Z=command.Z};
         }
-        fixed(Motor2Native.DrawQuad* p=native)
+        if(native.Length==0)
+        {
+            var hr=Motor2Native.DrawQuads(_nativeContext,h,null,0); if(hr<0) Marshal.ThrowExceptionForHR(hr);
+        }
+        else fixed(Motor2Native.DrawQuad* p=native)
         {
             var hr=Motor2Native.DrawQuads(_nativeContext,h,p,checked((uint)native.Length)); if(hr<0) Marshal.ThrowExceptionForHR(hr);
         }
@@ -100,7 +104,14 @@ public sealed class D3D12NativeDeviceContext : ID3D12CompositorDevice
     public ValueTask ReleaseAsync(object resource, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        if (resource is nint native && native != 0) Motor2Native.ReleaseResource(native);
+        if (resource is nint native && native != 0) Motor2Native.ReleaseResource(_nativeContext,native);
+        return ValueTask.CompletedTask;
+    }
+
+    public ValueTask ReleaseRenderTargetAsync(object target, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (target is nint native && native != 0) Motor2Native.ReleaseRenderTarget(_nativeContext,native);
         return ValueTask.CompletedTask;
     }
 
