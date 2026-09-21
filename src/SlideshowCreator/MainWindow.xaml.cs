@@ -170,6 +170,23 @@ public partial class MainWindow : Window
         }
     }
 
+    double CalculateCarouselSceneDuration(int targetSegment)
+    {
+        int segment = 0;
+        for (int i = 0; i < Media.Count;)
+        {
+            double d;
+            int used;
+            if (i + 2 < Media.Count && segment % 5 == 2) { d = Math.Min(Media[i].Duration, Math.Min(Media[i + 1].Duration, Media[i + 2].Duration)); used = 3; }
+            else if (i + 3 < Media.Count && segment % 5 == 4) { d = Math.Min(Math.Min(Media[i].Duration, Media[i + 1].Duration), Math.Min(Media[i + 2].Duration, Media[i + 3].Duration)); used = 4; }
+            else if (i + 1 < Media.Count) { d = Math.Min(Media[i].Duration, Media[i + 1].Duration); used = 2; }
+            else { d = Media[i].Duration; used = 1; }
+            if (segment == targetSegment) return d;
+            segment++; i += used;
+        }
+        return 1;
+    }
+
     double CalculateCarouselDuration()
     {
         double total = 0; int segment = 0;
@@ -234,7 +251,25 @@ public partial class MainWindow : Window
             }
             segments.Append($"[s{segment}]"); segment++; i += (i + 1 < Media.Count ? 2 : 1);
         }
-        filters.Append($"{segments}concat=n={segment}:v=1:a=0[carouselbase];");
+        // Blend scene boundaries so CARUSEL evolves instead of hard-cutting between layouts.
+        // Keep a short transition: the photograph remains the subject, not the effect.
+        var sceneLabels = Enumerable.Range(0, segment).Select(x => $"[s{x}]").ToArray();
+        if (segment == 1) filters.Append($"{sceneLabels[0]}copy[carouselbase];");
+        else
+        {
+            var transition = 0.30;
+            var accumulated = 0.0;
+            for (int x = 0; x < segment - 1; x++)
+            {
+                var left = x == 0 ? sceneLabels[0] : $"[xf{x - 1}]";
+                var right = sceneLabels[x + 1];
+                var sceneDuration = Math.Max(0.6, CalculateCarouselSceneDuration(x));
+                accumulated += sceneDuration;
+                var offset = Math.Max(0, accumulated - transition * (x + 1));
+                var output = x == segment - 2 ? "[carouselbase]" : $"[xf{x}]";
+                filters.Append($"{left}{right}xfade=transition=fade:duration={F(transition)}:offset={F(offset)}{output};");
+            }
+        }
         // Give the assembled CARUSEL continuous motion without cropping any source photo.
         // The canvas remains 1920x1080; motion is a subtle whole-scene translation, not a Ken Burns crop/zoom.
         var totalDuration = CalculateCarouselDuration();
