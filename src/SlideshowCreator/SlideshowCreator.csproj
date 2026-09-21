@@ -10,6 +10,9 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="MetadataExtractor" Version="2.9.0" />
+  </ItemGroup>
+  <ItemGroup>
     <Content Condition="Exists('Tools\ffmpeg.exe')" Include="Tools\\ffmpeg.exe" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
     <Content Condition="Exists('Tools\ffprobe.exe')" Include="Tools\\ffprobe.exe" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
   </ItemGroup>
