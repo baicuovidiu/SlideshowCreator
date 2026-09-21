@@ -199,14 +199,14 @@ public partial class MainWindow : Window
                 filters.Append($"[{i}:v]scale=1152:1080:force_original_aspect_ratio=decrease,pad=1152:1080:(ow-iw)/2:(oh-ih)/2:black,fps=30,setpts=PTS-STARTPTS[big{segment}];");
                 filters.Append($"[{i + 1}:v]scale=768:540:force_original_aspect_ratio=decrease,pad=768:540:(ow-iw)/2:(oh-ih)/2:black,fps=30,setpts=PTS-STARTPTS[s1_{segment}];");
                 filters.Append($"[{i + 2}:v]scale=768:540:force_original_aspect_ratio=decrease,pad=768:540:(ow-iw)/2:(oh-ih)/2:black,fps=30,setpts=PTS-STARTPTS[s2_{segment}];");
-                filters.Append($"[s1_{segment}][s2_{segment}]vstack=inputs=2[side{segment}];[big{segment}][side{segment}]hstack=inputs=2,trim=duration={F(duration)},setpts=PTS-STARTPTS,format=yuv420p[s{segment}];");
+                filters.Append($"[s1_{segment}]fade=t=in:st=0.12:d=0.28:alpha=1[s1e_{segment}];[s2_{segment}]fade=t=in:st=0.24:d=0.28:alpha=1[s2e_{segment}];[s1e_{segment}][s2e_{segment}]vstack=inputs=2[side{segment}];[big{segment}][side{segment}]hstack=inputs=2,trim=duration={F(duration)},setpts=PTS-STARTPTS,format=yuv420p[s{segment}];");
                 segments.Append($"[s{segment}]"); segment++; i += 3; continue;
             }
             if (i + 3 < Media.Count && segment % 5 == 4)
             {
                 duration = Math.Min(Math.Min(Media[i].Duration, Media[i + 1].Duration), Math.Min(Media[i + 2].Duration, Media[i + 3].Duration));
                 for (int q = 0; q < 4; q++) filters.Append($"[{i + q}:v]scale=960:540:force_original_aspect_ratio=decrease,pad=960:540:(ow-iw)/2:(oh-ih)/2:black,fps=30,setpts=PTS-STARTPTS[q{segment}_{q}];");
-                filters.Append($"[q{segment}_0][q{segment}_1]hstack=inputs=2[top{segment}];[q{segment}_2][q{segment}_3]hstack=inputs=2[bot{segment}];[top{segment}][bot{segment}]vstack=inputs=2,trim=duration={F(duration)},setpts=PTS-STARTPTS,format=yuv420p[s{segment}];");
+                filters.Append($"[q{segment}_0]fade=t=in:st=0:d=0.24:alpha=1[q0e{segment}];[q{segment}_1]fade=t=in:st=0.10:d=0.24:alpha=1[q1e{segment}];[q{segment}_2]fade=t=in:st=0.20:d=0.24:alpha=1[q2e{segment}];[q{segment}_3]fade=t=in:st=0.30:d=0.24:alpha=1[q3e{segment}];[q0e{segment}][q1e{segment}]hstack=inputs=2[top{segment}];[q2e{segment}][q3e{segment}]hstack=inputs=2[bot{segment}];[top{segment}][bot{segment}]vstack=inputs=2,trim=duration={F(duration)},setpts=PTS-STARTPTS,format=yuv420p[s{segment}];");
                 segments.Append($"[s{segment}]"); segment++; i += 4; continue;
             }
             if (i + 1 >= Media.Count)
