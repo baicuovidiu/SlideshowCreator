@@ -180,6 +180,15 @@ public partial class MainWindow : Window
         for (int i = 0; i < Media.Count; )
         {
             var a = Media[i]; var duration = a.Duration;
+            if (i + 2 < Media.Count && segment % 5 == 2)
+            {
+                duration = Math.Min(Media[i].Duration, Math.Min(Media[i + 1].Duration, Media[i + 2].Duration));
+                filters.Append($"[{i}:v]scale=1152:1080:force_original_aspect_ratio=decrease,pad=1152:1080:(ow-iw)/2:(oh-ih)/2:black,fps=30,setpts=PTS-STARTPTS[big{segment}];");
+                filters.Append($"[{i + 1}:v]scale=768:540:force_original_aspect_ratio=decrease,pad=768:540:(ow-iw)/2:(oh-ih)/2:black,fps=30,setpts=PTS-STARTPTS[s1_{segment}];");
+                filters.Append($"[{i + 2}:v]scale=768:540:force_original_aspect_ratio=decrease,pad=768:540:(ow-iw)/2:(oh-ih)/2:black,fps=30,setpts=PTS-STARTPTS[s2_{segment}];");
+                filters.Append($"[s1_{segment}][s2_{segment}]vstack=inputs=2[side{segment}];[big{segment}][side{segment}]hstack=inputs=2,trim=duration={F(duration)},setpts=PTS-STARTPTS,format=yuv420p[s{segment}];");
+                segments.Append($"[s{segment}]"); segment++; i += 3; continue;
+            }
             if (i + 3 < Media.Count && segment % 5 == 4)
             {
                 duration = Math.Min(Math.Min(Media[i].Duration, Media[i + 1].Duration), Math.Min(Media[i + 2].Duration, Media[i + 3].Duration));
