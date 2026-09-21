@@ -224,7 +224,9 @@ public partial class MainWindow : Window
         filters.Append($"{segments}concat=n={segment}:v=1:a=0[carouselbase];");
         // Give the assembled CARUSEL continuous motion without cropping any source photo.
         // The canvas remains 1920x1080; motion is a subtle whole-scene translation, not a Ken Burns crop/zoom.
-        filters.Append($"[carouselbase]pad=1940:1100:10:10:black,crop=1920:1080:x='10+8*sin(t*1.1)':y='10+8*cos(t*0.9)',fade=t=in:st=0:d=0.35[outv]");
+        var totalDuration = Media.Sum(m => m.Duration);
+        var fadeOutStart = Math.Max(0, totalDuration - 0.45);
+        filters.Append($"[carouselbase]pad=1940:1100:10:10:black,crop=1920:1080:x='10+8*sin(t*1.1)':y='10+8*cos(t*0.9)',fade=t=in:st=0:d=0.35,fade=t=out:st={F(fadeOutStart)}:d=0.45[outv]");
         var script = Path.Combine(dir, "carousel-filter.txt"); File.WriteAllText(script, filters.ToString(), new UTF8Encoding(false));
         var musicIndex = Media.Count; var audioInput = music == null ? "" : $" -stream_loop -1 -i \"{music}\""; var audioMap = music == null ? " -an" : $" -map {musicIndex}:a -c:a aac -b:a 256k -shortest";
         Ffmpeg($"-y{inputs}{audioInput} -filter_complex_script \"{script}\" -map \"[outv]\"{audioMap} {videoEncoder} -movflags +faststart \"{dest}\"");
