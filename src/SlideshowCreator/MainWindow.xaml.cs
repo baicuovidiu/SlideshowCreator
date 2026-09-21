@@ -288,7 +288,8 @@ public partial class MainWindow : Window
                 accumulated += sceneDuration;
                 var offset = Math.Max(0, accumulated - transition * (x + 1));
                 var output = x == segment - 2 ? "[carouselbase]" : $"[xf{x}]";
-                filters.Append($"{left}{right}xfade=transition=fade:duration={F(transition)}:offset={F(offset)}{output};");
+                var transitionName = (x % 4) switch { 0 => "fade", 1 => "slideleft", 2 => "slideup", _ => "smoothleft" };
+                filters.Append($"{left}{right}xfade=transition={transitionName}:duration={F(transition)}:offset={F(offset)}{output};");
             }
         }
         // Give the assembled CARUSEL continuous motion without cropping any source photo.
