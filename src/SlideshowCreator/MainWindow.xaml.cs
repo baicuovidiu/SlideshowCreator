@@ -187,10 +187,21 @@ public partial class MainWindow : Window
             else
             {
                 var b = Media[i + 1]; duration = Math.Min(a.Duration, b.Duration);
-                var left = segment % 2 == 0 ? 1152 : 768; var right = 1920 - left;
-                filters.Append($"[{i}:v]scale={left}:1080:force_original_aspect_ratio=decrease,pad={left}:1080:(ow-iw)/2:(oh-ih)/2:black,fps=30,setpts=PTS-STARTPTS[a{segment}];");
-                filters.Append($"[{i + 1}:v]scale={right}:1080:force_original_aspect_ratio=decrease,pad={right}:1080:(ow-iw)/2:(oh-ih)/2:black,fps=30,setpts=PTS-STARTPTS[b{segment}];");
-                filters.Append($"[a{segment}][b{segment}]hstack=inputs=2,trim=duration={F(duration)},setpts=PTS-STARTPTS,format=yuv420p[s{segment}];");
+                var family = segment % 4;
+                if (family < 2)
+                {
+                    var left = family == 0 ? 1152 : 768; var right = 1920 - left;
+                    filters.Append($"[{i}:v]scale={left}:1080:force_original_aspect_ratio=decrease,pad={left}:1080:(ow-iw)/2:(oh-ih)/2:black,fps=30,setpts=PTS-STARTPTS[a{segment}];");
+                    filters.Append($"[{i + 1}:v]scale={right}:1080:force_original_aspect_ratio=decrease,pad={right}:1080:(ow-iw)/2:(oh-ih)/2:black,fps=30,setpts=PTS-STARTPTS[b{segment}];");
+                    filters.Append($"[a{segment}][b{segment}]hstack=inputs=2,trim=duration={F(duration)},setpts=PTS-STARTPTS,format=yuv420p[s{segment}];");
+                }
+                else
+                {
+                    var top = family == 2 ? 648 : 432; var bottom = 1080 - top;
+                    filters.Append($"[{i}:v]scale=1920:{top}:force_original_aspect_ratio=decrease,pad=1920:{top}:(ow-iw)/2:(oh-ih)/2:black,fps=30,setpts=PTS-STARTPTS[a{segment}];");
+                    filters.Append($"[{i + 1}:v]scale=1920:{bottom}:force_original_aspect_ratio=decrease,pad=1920:{bottom}:(ow-iw)/2:(oh-ih)/2:black,fps=30,setpts=PTS-STARTPTS[b{segment}];");
+                    filters.Append($"[a{segment}][b{segment}]vstack=inputs=2,trim=duration={F(duration)},setpts=PTS-STARTPTS,format=yuv420p[s{segment}];");
+                }
             }
             segments.Append($"[s{segment}]"); segment++;
         }
