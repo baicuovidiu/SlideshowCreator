@@ -142,7 +142,7 @@ public partial class MainWindow : Window
             ValidateTimeline(); var expectedDuration = Media.Sum(m => m.Duration); var videoEncoder = SelectVideoEncoder(dir);
             if (Media.All(m => m.Type == "Foto"))
             {
-                if (CarouselModeBox.SelectedIndex == 1) { expectedDuration = CalculateCarouselDuration(); ExportPhotosCarousel(dest, dir, videoEncoder); }
+                if (CarouselModeBox.SelectedIndex == 1) { expectedDuration = CalculateCarouselDurationWithTransitions(); ExportPhotosCarousel(dest, dir, videoEncoder); }
                 else ExportPhotosSinglePass(dest, dir, videoEncoder);
                 ValidateExport(dest, expectedDuration);
                 return;
@@ -168,6 +168,27 @@ public partial class MainWindow : Window
             if (!double.IsFinite(m.TrimIn) || m.TrimIn < 0) throw new Exception("Trim IN invalid: " + Path.GetFileName(m.Path));
             if (m.Type == "Video") { var sourceDuration = Probe(m.Path); if (m.TrimIn >= sourceDuration || m.TrimIn + m.Duration > sourceDuration + .05) throw new Exception($"Trim-ul depășește clipul: {Path.GetFileName(m.Path)} (sursă {F(sourceDuration)}s, IN {F(m.TrimIn)}s, durată {F(m.Duration)}s)."); }
         }
+    }
+
+    double CalculateCarouselDurationWithTransitions()
+    {
+        var baseDuration = CalculateCarouselDuration();
+        var scenes = CalculateCarouselSceneCount();
+        return Math.Max(0, baseDuration - Math.Max(0, scenes - 1) * 0.30);
+    }
+
+    int CalculateCarouselSceneCount()
+    {
+        int segment = 0;
+        for (int i = 0; i < Media.Count;)
+        {
+            int used;
+            if (i + 2 < Media.Count && segment % 5 == 2) used = 3;
+            else if (i + 3 < Media.Count && segment % 5 == 4) used = 4;
+            else used = i + 1 < Media.Count ? 2 : 1;
+            segment++; i += used;
+        }
+        return segment;
     }
 
     double CalculateCarouselSceneDuration(int targetSegment)
