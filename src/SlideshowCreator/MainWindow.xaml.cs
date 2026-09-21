@@ -142,7 +142,7 @@ public partial class MainWindow : Window
             ValidateTimeline(); var expectedDuration = Media.Sum(m => m.Duration); var videoEncoder = SelectVideoEncoder(dir);
             if (Media.All(m => m.Type == "Foto"))
             {
-                if (CarouselModeBox.SelectedIndex == 1) ExportPhotosCarousel(dest, dir, videoEncoder);
+                if (CarouselModeBox.SelectedIndex == 1) { expectedDuration = CalculateCarouselDuration(); ExportPhotosCarousel(dest, dir, videoEncoder); }
                 else ExportPhotosSinglePass(dest, dir, videoEncoder);
                 ValidateExport(dest, expectedDuration);
                 return;
@@ -168,6 +168,19 @@ public partial class MainWindow : Window
             if (!double.IsFinite(m.TrimIn) || m.TrimIn < 0) throw new Exception("Trim IN invalid: " + Path.GetFileName(m.Path));
             if (m.Type == "Video") { var sourceDuration = Probe(m.Path); if (m.TrimIn >= sourceDuration || m.TrimIn + m.Duration > sourceDuration + .05) throw new Exception($"Trim-ul depășește clipul: {Path.GetFileName(m.Path)} (sursă {F(sourceDuration)}s, IN {F(m.TrimIn)}s, durată {F(m.Duration)}s)."); }
         }
+    }
+
+    double CalculateCarouselDuration()
+    {
+        double total = 0; int segment = 0;
+        for (int i = 0; i < Media.Count; )
+        {
+            if (i + 2 < Media.Count && segment % 5 == 2) { total += Math.Min(Media[i].Duration, Math.Min(Media[i + 1].Duration, Media[i + 2].Duration)); segment++; i += 3; continue; }
+            if (i + 3 < Media.Count && segment % 5 == 4) { total += Math.Min(Math.Min(Media[i].Duration, Media[i + 1].Duration), Math.Min(Media[i + 2].Duration, Media[i + 3].Duration)); segment++; i += 4; continue; }
+            total += i + 1 < Media.Count ? Math.Min(Media[i].Duration, Media[i + 1].Duration) : Media[i].Duration;
+            segment++; i += i + 1 < Media.Count ? 2 : 1;
+        }
+        return total;
     }
 
     void ExportPhotosCarousel(string dest, string dir, string videoEncoder)
@@ -224,7 +237,7 @@ public partial class MainWindow : Window
         filters.Append($"{segments}concat=n={segment}:v=1:a=0[carouselbase];");
         // Give the assembled CARUSEL continuous motion without cropping any source photo.
         // The canvas remains 1920x1080; motion is a subtle whole-scene translation, not a Ken Burns crop/zoom.
-        var totalDuration = Media.Sum(m => m.Duration);
+        var totalDuration = CalculateCarouselDuration();
         var fadeOutStart = Math.Max(0, totalDuration - 0.45);
         filters.Append($"[carouselbase]pad=1940:1100:10:10:black,crop=1920:1080:x='10+8*sin(t*1.1)':y='10+8*cos(t*0.9)',fade=t=in:st=0:d=0.35,fade=t=out:st={F(fadeOutStart)}:d=0.45[outv]");
         var script = Path.Combine(dir, "carousel-filter.txt"); File.WriteAllText(script, filters.ToString(), new UTF8Encoding(false));
