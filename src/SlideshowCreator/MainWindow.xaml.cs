@@ -36,7 +36,7 @@ public partial class MainWindow : Window
             var ext = Path.GetExtension(p);
             bool video = VideoExt.Contains(ext), photo = PhotoExt.Contains(ext);
             if (!video && !photo) continue;
-            var mediaDate = photo ? await Task.Run(() => ReadPhotoCaptureDate(p)) : File.GetLastWriteTime(p);
+            var mediaDate = photo ? await Task.Run(() => ReadPhotoCaptureDate(p)) : await Task.Run(() => ReadVideoCaptureDate(p));
             var item = new MediaItem { Path = p, Type = video ? "Video" : "Foto", Date = mediaDate, Duration = video ? await Task.Run(() => Probe(p)) : 4 };
             item.Thumbnail = await Task.Run(() => video ? CreateVideoThumb(p) : LoadPhotoThumb(p));
             Media.Add(item);
@@ -71,6 +71,18 @@ public partial class MainWindow : Window
             return subIfd != null && subIfd.ContainsTag(ExifDirectoryBase.TagDateTimeOriginal);
         }
         catch { return false; }
+    }
+
+    static DateTime ReadVideoCaptureDate(string path)
+    {
+        try
+        {
+            var s = Run("ffprobe.exe", $"-v error -show_entries format_tags=creation_time -of default=nw=1:nk=1 \"{path}\"", out var code).Trim();
+            if (code == 0 && DateTimeOffset.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var dto))
+                return dto.LocalDateTime;
+        }
+        catch { }
+        return File.GetLastWriteTime(path);
     }
 
     static double Probe(string p)
