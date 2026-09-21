@@ -11,7 +11,7 @@
   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="6"/><RowDefinition Height="200" MinHeight="100"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
   <DockPanel Margin="0,0,0,10">
    <StackPanel DockPanel.Dock="Left"><TextBlock Text="SLIDESHOW CREATOR" Foreground="#D6A95E" FontSize="22" FontWeight="SemiBold"/><TextBlock Text="MVP 0.1.4" Foreground="#777"/></StackPanel>
-   <WrapPanel HorizontalAlignment="Right"><Button Style="{StaticResource TopButton}" Background="#286A8E" Click="AddMedia_Click">+ FOTO / VIDEO</Button><Button Style="{StaticResource TopButton}" Background="#5E4B8B" Click="AddMusic_Click">+ MUZICĂ</Button><Button Style="{StaticResource TopButton}" Background="#4C7358" Click="Sort_Click">SORTARE CRONOLOGICĂ</Button></WrapPanel>
+   <WrapPanel HorizontalAlignment="Right"><Button Style="{StaticResource TopButton}" Background="#286A8E" Click="AddMedia_Click">+ FOTO / VIDEO</Button><Button Style="{StaticResource TopButton}" Background="#5E4B8B" Click="AddMusic_Click">+ MUZICĂ</Button><Button Style="{StaticResource TopButton}" Background="#4C7358" Click="Sort_Click">SORTARE CRONOLOGICĂ</Button><ComboBox x:Name="CarouselModeBox" Width="155" Margin="8,0,0,0" SelectedIndex="0"><ComboBoxItem Content="CARUSEL: Simplu"/><ComboBoxItem Content="CARUSEL: Dinamic"/></ComboBox></WrapPanel>
   </DockPanel>
   <Grid Grid.Row="1">
    <Grid.ColumnDefinitions><ColumnDefinition Width="330" MinWidth="220"/><ColumnDefinition Width="6"/><ColumnDefinition Width="*" MinWidth="300"/><ColumnDefinition Width="6"/><ColumnDefinition Width="255" MinWidth="210"/></Grid.ColumnDefinitions>
