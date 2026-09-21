@@ -260,7 +260,7 @@ public partial class MainWindow : Window
                     var left = family == 0 ? 1152 : 768; var right = 1920 - left;
                     filters.Append($"[{i}:v]scale={left}:1080:force_original_aspect_ratio=decrease,pad={left}:1080:(ow-iw)/2:(oh-ih)/2:black,fps=30,setpts=PTS-STARTPTS[a{segment}];");
                     filters.Append($"[{i + 1}:v]scale={right}:1080:force_original_aspect_ratio=decrease,pad={right}:1080:(ow-iw)/2:(oh-ih)/2:black,fps=30,setpts=PTS-STARTPTS[b{segment}];");
-                    filters.Append($"[a{segment}]crop=w='iw-min(iw,iw*0.06*t/0.35)':h=ih:x=0:y=0[ae{segment}];[b{segment}]crop=w='iw-min(iw,iw*0.06*(0.35-t)/0.35)':h=ih:x='min(iw,iw*0.06*(0.35-t)/0.35)':y=0[be{segment}];[ae{segment}][be{segment}]hstack=inputs=2,trim=duration={F(duration)},setpts=PTS-STARTPTS,format=yuv420p[s{segment}];");
+                    filters.Append($"[a{segment}]fade=t=in:st=0:d=0.28:alpha=1[ae{segment}];[b{segment}]fade=t=in:st=0.14:d=0.28:alpha=1[be{segment}];[ae{segment}][be{segment}]hstack=inputs=2,trim=duration={F(duration)},setpts=PTS-STARTPTS,format=yuv420p[s{segment}];");
                 }
                 else
                 {
