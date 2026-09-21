@@ -177,9 +177,16 @@ public partial class MainWindow : Window
         var inputs = new StringBuilder(); var filters = new StringBuilder(); var segments = new StringBuilder();
         for (int i = 0; i < Media.Count; i++) inputs.Append($" -loop 1 -t {F(Media[i].Duration)} -i \"{Media[i].Path}\"");
         int segment = 0;
-        for (int i = 0; i < Media.Count; i += 2)
+        for (int i = 0; i < Media.Count; )
         {
             var a = Media[i]; var duration = a.Duration;
+            if (i + 3 < Media.Count && segment % 5 == 4)
+            {
+                duration = Math.Min(Math.Min(Media[i].Duration, Media[i + 1].Duration), Math.Min(Media[i + 2].Duration, Media[i + 3].Duration));
+                for (int q = 0; q < 4; q++) filters.Append($"[{i + q}:v]scale=960:540:force_original_aspect_ratio=decrease,pad=960:540:(ow-iw)/2:(oh-ih)/2:black,fps=30,setpts=PTS-STARTPTS[q{segment}_{q}];");
+                filters.Append($"[q{segment}_0][q{segment}_1]hstack=inputs=2[top{segment}];[q{segment}_2][q{segment}_3]hstack=inputs=2[bot{segment}];[top{segment}][bot{segment}]vstack=inputs=2,trim=duration={F(duration)},setpts=PTS-STARTPTS,format=yuv420p[s{segment}];");
+                segments.Append($"[s{segment}]"); segment++; i += 4; continue;
+            }
             if (i + 1 >= Media.Count)
             {
                 filters.Append($"[{i}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,fps=30,format=yuv420p,setpts=PTS-STARTPTS[s{segment}];");
@@ -203,7 +210,7 @@ public partial class MainWindow : Window
                     filters.Append($"[a{segment}][b{segment}]vstack=inputs=2,trim=duration={F(duration)},setpts=PTS-STARTPTS,format=yuv420p[s{segment}];");
                 }
             }
-            segments.Append($"[s{segment}]"); segment++;
+            segments.Append($"[s{segment}]"); segment++; i += (i + 1 < Media.Count ? 2 : 1);
         }
         filters.Append($"{segments}concat=n={segment}:v=1:a=0[outv]");
         var script = Path.Combine(dir, "carousel-filter.txt"); File.WriteAllText(script, filters.ToString(), new UTF8Encoding(false));
