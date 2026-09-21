@@ -73,6 +73,17 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'FAIL: packaged ffmpeg.exe cannot start' }
           & $ffprobe -hide_banner -version
           if ($LASTEXITCODE -ne 0) { throw 'FAIL: packaged ffprobe.exe cannot start' }
+      - name: Software validate CARUSEL transition primitives
+        shell: pwsh
+        run: |
+          $ffmpeg='.\artifacts\SlideshowCreator-App\Tools\ffmpeg.exe'
+          $ffprobe='.\artifacts\SlideshowCreator-App\Tools\ffprobe.exe'
+          $out='.\artifacts\carousel-software-smoke.mp4'
+          & $ffmpeg -y -f lavfi -i 'color=c=red:s=1920x1080:r=30:d=1.2' -f lavfi -i 'color=c=blue:s=1920x1080:r=30:d=1.2' -filter_complex '[0:v][1:v]xfade=transition=slideleft:duration=0.3:offset=0.8,format=yuv420p[outv]' -map '[outv]' -c:v libx264 -preset ultrafast $out
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $out)) { throw 'FAIL: CARUSEL xfade software smoke export failed' }
+          $probe=& $ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,width,height -show_entries format=duration -of default=noprint_wrappers=1 $out
+          if ($LASTEXITCODE -ne 0 -or -not ($probe -match 'codec_name=h264') -or -not ($probe -match 'width=1920') -or -not ($probe -match 'height=1080')) { throw 'FAIL: CARUSEL smoke ffprobe validation failed' }
+
       - name: Upload runnable salvage application
         uses: actions/upload-artifact@v4
         with:
