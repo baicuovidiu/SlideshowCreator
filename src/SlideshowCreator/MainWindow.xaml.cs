@@ -140,7 +140,13 @@ public partial class MainWindow : Window
         try
         {
             ValidateTimeline(); var expectedDuration = Media.Sum(m => m.Duration); var videoEncoder = SelectVideoEncoder(dir);
-            if (Media.All(m => m.Type == "Foto")) { ExportPhotosSinglePass(dest, dir, videoEncoder); ValidateExport(dest, expectedDuration); return; }
+            if (Media.All(m => m.Type == "Foto"))
+            {
+                if (CarouselModeBox.SelectedIndex == 1) ExportPhotosCarousel(dest, dir, videoEncoder);
+                else ExportPhotosSinglePass(dest, dir, videoEncoder);
+                ValidateExport(dest, expectedDuration);
+                return;
+            }
             var inputs = new StringBuilder(); var filters = new StringBuilder(); var concatInputs = new StringBuilder(); int i = 0;
             foreach (var m in Media)
             {
@@ -162,6 +168,36 @@ public partial class MainWindow : Window
             if (!double.IsFinite(m.TrimIn) || m.TrimIn < 0) throw new Exception("Trim IN invalid: " + Path.GetFileName(m.Path));
             if (m.Type == "Video") { var sourceDuration = Probe(m.Path); if (m.TrimIn >= sourceDuration || m.TrimIn + m.Duration > sourceDuration + .05) throw new Exception($"Trim-ul depășește clipul: {Path.GetFileName(m.Path)} (sursă {F(sourceDuration)}s, IN {F(m.TrimIn)}s, durată {F(m.Duration)}s)."); }
         }
+    }
+
+    void ExportPhotosCarousel(string dest, string dir, string videoEncoder)
+    {
+        // First useful CARUSEL: pairs of complete photos, alternating 60/40 and 40/60.
+        // No crop: each source is scaled with force_original_aspect_ratio=decrease and padded inside its plane.
+        var inputs = new StringBuilder(); var filters = new StringBuilder(); var segments = new StringBuilder();
+        for (int i = 0; i < Media.Count; i++) inputs.Append($" -loop 1 -t {F(Media[i].Duration)} -i \"{Media[i].Path}\"");
+        int segment = 0;
+        for (int i = 0; i < Media.Count; i += 2)
+        {
+            var a = Media[i]; var duration = a.Duration;
+            if (i + 1 >= Media.Count)
+            {
+                filters.Append($"[{i}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,fps=30,format=yuv420p,setpts=PTS-STARTPTS[s{segment}];");
+            }
+            else
+            {
+                var b = Media[i + 1]; duration = Math.Min(a.Duration, b.Duration);
+                var left = segment % 2 == 0 ? 1152 : 768; var right = 1920 - left;
+                filters.Append($"[{i}:v]scale={left}:1080:force_original_aspect_ratio=decrease,pad={left}:1080:(ow-iw)/2:(oh-ih)/2:black,fps=30,setpts=PTS-STARTPTS[a{segment}];");
+                filters.Append($"[{i + 1}:v]scale={right}:1080:force_original_aspect_ratio=decrease,pad={right}:1080:(ow-iw)/2:(oh-ih)/2:black,fps=30,setpts=PTS-STARTPTS[b{segment}];");
+                filters.Append($"[a{segment}][b{segment}]hstack=inputs=2,trim=duration={F(duration)},setpts=PTS-STARTPTS,format=yuv420p[s{segment}];");
+            }
+            segments.Append($"[s{segment}]"); segment++;
+        }
+        filters.Append($"{segments}concat=n={segment}:v=1:a=0[outv]");
+        var script = Path.Combine(dir, "carousel-filter.txt"); File.WriteAllText(script, filters.ToString(), new UTF8Encoding(false));
+        var musicIndex = Media.Count; var audioInput = music == null ? "" : $" -stream_loop -1 -i \"{music}\""; var audioMap = music == null ? " -an" : $" -map {musicIndex}:a -c:a aac -b:a 256k -shortest";
+        Ffmpeg($"-y{inputs}{audioInput} -filter_complex_script \"{script}\" -map \"[outv]\"{audioMap} {videoEncoder} -movflags +faststart \"{dest}\"");
     }
 
     void ExportPhotosSinglePass(string dest, string dir, string videoEncoder)
