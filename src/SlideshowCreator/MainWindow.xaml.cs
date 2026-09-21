@@ -62,6 +62,17 @@ public partial class MainWindow : Window
         return File.GetLastWriteTime(path);
     }
 
+    static bool HasEmbeddedExifDate(string path)
+    {
+        try
+        {
+            var directories = ImageMetadataReader.ReadMetadata(path);
+            var subIfd = directories.OfType<ExifSubIfdDirectory>().FirstOrDefault();
+            return subIfd != null && subIfd.ContainsTag(ExifDirectoryBase.TagDateTimeOriginal);
+        }
+        catch { return false; }
+    }
+
     static double Probe(string p)
     {
         try { var s = Run("ffprobe.exe", $"-v error -show_entries format=duration -of default=nw=1:nk=1 \"{p}\"", out var c); if (c == 0 && double.TryParse(s.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var n)) return Math.Max(.1, n); } catch { }
