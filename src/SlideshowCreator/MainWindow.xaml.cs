@@ -108,7 +108,7 @@ public partial class MainWindow : Window
     void MediaList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (MediaList.SelectedItem is not MediaItem m) return;
-        DurationBox.Text = m.Duration.ToString("0.##", CultureInfo.InvariantCulture); TrimInBox.Text = m.TrimIn.ToString("0.##", CultureInfo.InvariantCulture); MuteBox.IsChecked = m.Mute;
+        DurationBox.Text = m.Duration.ToString("0.##", CultureInfo.InvariantCulture); TrimInBox.Text = m.TrimIn.ToString("0.##", CultureInfo.InvariantCulture); TimeOffsetBox.Text = m.CaptureTimeOffsetSeconds.ToString("0.##", CultureInfo.InvariantCulture); MuteBox.IsChecked = m.Mute;
         VideoPreview.Stop(); VideoPreview.Visibility = Visibility.Collapsed; PhotoPreview.Visibility = Visibility.Collapsed;
         if (m.Type == "Foto") { try { PhotoPreview.Source = new BitmapImage(new Uri(m.Path)); PhotoPreview.Visibility = Visibility.Visible; } catch { PhotoPreview.Source = m.Thumbnail; PhotoPreview.Visibility = Visibility.Visible; } }
         else { try { VideoPreview.Source = new Uri(m.Path); VideoPreview.Visibility = Visibility.Visible; } catch { } }
@@ -119,7 +119,8 @@ public partial class MainWindow : Window
         if (MediaList.SelectedItem is not MediaItem m) return;
         if (double.TryParse(DurationBox.Text.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var d)) m.Duration = Math.Max(.1, d);
         if (double.TryParse(TrimInBox.Text.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var t)) m.TrimIn = Math.Max(0, t);
-        m.Mute = MuteBox.IsChecked == true; m.Changed(nameof(MediaItem.Duration));
+        if (double.TryParse(TimeOffsetBox.Text.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var offset)) m.CaptureTimeOffsetSeconds = offset;
+        m.Mute = MuteBox.IsChecked == true; m.Changed(nameof(MediaItem.Duration)); m.Changed(nameof(MediaItem.EffectiveDate));
     }
 
     void Preview_Click(object sender, RoutedEventArgs e) { if (MediaList.SelectedItem is MediaItem m && m.Type == "Video") { try { VideoPreview.Position = TimeSpan.FromSeconds(m.TrimIn); VideoPreview.Play(); } catch { } } }
