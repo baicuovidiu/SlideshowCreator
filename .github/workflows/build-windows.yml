@@ -25,8 +25,23 @@ jobs:
           $zip="$pwd\artifacts\ffmpeg-$version-essentials_build.zip"
           $shaFile="$zip.sha256"
           New-Item -ItemType Directory -Force -Path "$pwd\artifacts" | Out-Null
-          Invoke-WebRequest "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-$version-essentials_build.zip" -OutFile $zip
-          Invoke-WebRequest "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-$version-essentials_build.zip.sha256" -OutFile $shaFile
+          function Get-WithRetry([string]$Uri,[string]$OutFile) {
+            $last=$null
+            foreach($attempt in 1..5) {
+              try {
+                Invoke-WebRequest $Uri -OutFile $OutFile -TimeoutSec 90
+                if ((Test-Path $OutFile) -and (Get-Item $OutFile).Length -gt 0) { return }
+                throw "Downloaded file is empty: $OutFile"
+              } catch {
+                $last=$_
+                Remove-Item $OutFile -Force -ErrorAction SilentlyContinue
+                if ($attempt -lt 5) { Start-Sleep -Seconds ([Math]::Min(30, 3 * [Math]::Pow(2,$attempt-1))) }
+              }
+            }
+            throw "FAIL: download failed after 5 attempts: $Uri`n$last"
+          }
+          Get-WithRetry "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-$version-essentials_build.zip" $zip
+          Get-WithRetry "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-$version-essentials_build.zip.sha256" $shaFile
           $expected=((Get-Content $shaFile -Raw).Trim() -split '\s+')[0].ToLowerInvariant()
           $actual=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($actual -ne $expected) { throw "FAIL: FFmpeg checksum mismatch expected=$expected actual=$actual" }
