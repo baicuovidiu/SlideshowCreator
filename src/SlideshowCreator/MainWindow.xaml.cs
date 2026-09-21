@@ -1,4 +1,6 @@
 using Microsoft.Win32;
+using MetadataExtractor;
+using MetadataExtractor.Formats.Exif;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
@@ -34,13 +36,30 @@ public partial class MainWindow : Window
             var ext = Path.GetExtension(p);
             bool video = VideoExt.Contains(ext), photo = PhotoExt.Contains(ext);
             if (!video && !photo) continue;
-            var item = new MediaItem { Path = p, Type = video ? "Video" : "Foto", Date = File.GetLastWriteTime(p), Duration = video ? await Task.Run(() => Probe(p)) : 4 };
+            var mediaDate = photo ? await Task.Run(() => ReadPhotoCaptureDate(p)) : File.GetLastWriteTime(p);
+            var item = new MediaItem { Path = p, Type = video ? "Video" : "Foto", Date = mediaDate, Duration = video ? await Task.Run(() => Probe(p)) : 4 };
             item.Thumbnail = await Task.Run(() => video ? CreateVideoThumb(p) : LoadPhotoThumb(p));
             Media.Add(item);
             CountText.Text = $"{Media.Count} elemente";
             StatusText.Text = "Importat: " + Path.GetFileName(p);
         }
         if (Media.Count == 0) ImportDropZone.Visibility = Visibility.Visible;
+    }
+
+    static DateTime ReadPhotoCaptureDate(string path)
+    {
+        try
+        {
+            var directories = ImageMetadataReader.ReadMetadata(path);
+            var subIfd = directories.OfType<ExifSubIfdDirectory>().FirstOrDefault();
+            if (subIfd != null && subIfd.TryGetDateTime(ExifDirectoryBase.TagDateTimeOriginal, out var original))
+                return original;
+            var ifd0 = directories.OfType<ExifIfd0Directory>().FirstOrDefault();
+            if (ifd0 != null && ifd0.TryGetDateTime(ExifDirectoryBase.TagDateTime, out var modified))
+                return modified;
+        }
+        catch { }
+        return File.GetLastWriteTime(path);
     }
 
     static double Probe(string p)
