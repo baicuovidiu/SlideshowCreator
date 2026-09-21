@@ -37,7 +37,7 @@ public partial class MainWindow : Window
             bool video = VideoExt.Contains(ext), photo = PhotoExt.Contains(ext);
             if (!video && !photo) continue;
             var mediaDate = photo ? await Task.Run(() => ReadPhotoCaptureDate(p)) : await Task.Run(() => ReadVideoCaptureDate(p));
-            var item = new MediaItem { Path = p, Type = video ? "Video" : "Foto", Date = mediaDate, Duration = video ? await Task.Run(() => Probe(p)) : 4 };
+            var item = new MediaItem { Path = p, Type = video ? "Video" : "Foto", SourceDate = mediaDate, Duration = video ? await Task.Run(() => Probe(p)) : 4 };
             item.Thumbnail = await Task.Run(() => video ? CreateVideoThumb(p) : LoadPhotoThumb(p));
             Media.Add(item);
             CountText.Text = $"{Media.Count} elemente";
@@ -52,11 +52,9 @@ public partial class MainWindow : Window
         {
             var directories = ImageMetadataReader.ReadMetadata(path);
             var subIfd = directories.OfType<ExifSubIfdDirectory>().FirstOrDefault();
-            if (subIfd != null && subIfd.TryGetDateTime(ExifDirectoryBase.TagDateTimeOriginal, out var original))
-                return original;
+            if (subIfd != null && subIfd.TryGetDateTime(ExifDirectoryBase.TagDateTimeOriginal, out var original)) return original;
             var ifd0 = directories.OfType<ExifIfd0Directory>().FirstOrDefault();
-            if (ifd0 != null && ifd0.TryGetDateTime(ExifDirectoryBase.TagDateTime, out var modified))
-                return modified;
+            if (ifd0 != null && ifd0.TryGetDateTime(ExifDirectoryBase.TagDateTime, out var modified)) return modified;
         }
         catch { }
         return File.GetLastWriteTime(path);
@@ -64,12 +62,7 @@ public partial class MainWindow : Window
 
     static bool HasEmbeddedExifDate(string path)
     {
-        try
-        {
-            var directories = ImageMetadataReader.ReadMetadata(path);
-            var subIfd = directories.OfType<ExifSubIfdDirectory>().FirstOrDefault();
-            return subIfd != null && subIfd.ContainsTag(ExifDirectoryBase.TagDateTimeOriginal);
-        }
+        try { var directories = ImageMetadataReader.ReadMetadata(path); var subIfd = directories.OfType<ExifSubIfdDirectory>().FirstOrDefault(); return subIfd != null && subIfd.ContainsTag(ExifDirectoryBase.TagDateTimeOriginal); }
         catch { return false; }
     }
 
@@ -78,8 +71,7 @@ public partial class MainWindow : Window
         try
         {
             var s = Run("ffprobe.exe", $"-v error -show_entries format_tags=creation_time -of default=nw=1:nk=1 \"{path}\"", out var code).Trim();
-            if (code == 0 && DateTimeOffset.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var dto))
-                return dto.LocalDateTime;
+            if (code == 0 && DateTimeOffset.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var dto)) return dto.LocalDateTime;
         }
         catch { }
         return File.GetLastWriteTime(path);
@@ -100,7 +92,7 @@ public partial class MainWindow : Window
     {
         try
         {
-            var dir = Path.Combine(Path.GetTempPath(), "SlideshowCreatorThumbs"); Directory.CreateDirectory(dir);
+            var dir = Path.Combine(Path.GetTempPath(), "SlideshowCreatorThumbs"); System.IO.Directory.CreateDirectory(dir);
             var jpg = Path.Combine(dir, Math.Abs(path.GetHashCode()) + ".jpg");
             if (!File.Exists(jpg)) Run("ffmpeg.exe", $"-y -ss 0.5 -i \"{path}\" -frames:v 1 -vf \"scale=240:-2:force_original_aspect_ratio=decrease\" -q:v 3 \"{jpg}\"", out _);
             if (!File.Exists(jpg)) return null;
@@ -110,7 +102,7 @@ public partial class MainWindow : Window
     }
 
     void AddMusic_Click(object sender, RoutedEventArgs e) { var d = new OpenFileDialog { Filter = "Audio|*.mp3;*.wav;*.m4a;*.aac;*.flac;*.ogg;*.opus|Toate fișierele|*.*" }; if (d.ShowDialog() == true) { music = d.FileName; MusicLabel.Text = "Muzică: " + Path.GetFileName(music); } }
-    void Sort_Click(object sender, RoutedEventArgs e) { var a = Media.OrderBy(x => x.Date).ToList(); Media.Clear(); foreach (var x in a) Media.Add(x); StatusText.Text = "Sortare cronologică terminată"; }
+    void Sort_Click(object sender, RoutedEventArgs e) { var a = Media.OrderBy(x => x.EffectiveDate).ToList(); Media.Clear(); foreach (var x in a) Media.Add(x); StatusText.Text = "Sortare cronologică terminată"; }
     void Remove_Click(object sender, RoutedEventArgs e) { if (MediaList.SelectedItem is MediaItem m) Media.Remove(m); CountText.Text = $"{Media.Count} elemente"; if (Media.Count == 0) ImportDropZone.Visibility = Visibility.Visible; }
 
     void MediaList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -136,50 +128,28 @@ public partial class MainWindow : Window
     {
         if (Media.Count == 0) { MessageBox.Show("Importă mai întâi materialele."); return; }
         var d = new SaveFileDialog { Filter = "Video MP4|*.mp4", FileName = "Slideshow.mp4", AddExtension = true, DefaultExt = ".mp4" }; if (d.ShowDialog() != true) return;
-        try
-        {
-            IsEnabled = false; ExportProgress.Visibility = Visibility.Visible; StatusText.Text = "Export în lucru...";
-            await Task.Run(() => Export(d.FileName)); StatusText.Text = "Export finalizat"; MessageBox.Show("Export MP4 finalizat.\n\n" + d.FileName, "Slideshow Creator 0.1.4");
-        }
+        try { IsEnabled = false; ExportProgress.Visibility = Visibility.Visible; StatusText.Text = "Export în lucru..."; await Task.Run(() => Export(d.FileName)); StatusText.Text = "Export finalizat"; MessageBox.Show("Export MP4 finalizat.\n\n" + d.FileName, "Slideshow Creator 0.1.4"); }
         catch (Exception ex) { MessageBox.Show(ex.Message, "Eroare export"); }
         finally { IsEnabled = true; ExportProgress.Visibility = Visibility.Collapsed; }
     }
 
     void Export(string dest)
     {
-        var dir = Path.Combine(Path.GetTempPath(), "SlideshowCreator", Guid.NewGuid().ToString("N")); Directory.CreateDirectory(dir);
+        var dir = Path.Combine(Path.GetTempPath(), "SlideshowCreator", Guid.NewGuid().ToString("N")); System.IO.Directory.CreateDirectory(dir);
         try
         {
-            ValidateTimeline();
-            var expectedDuration = Media.Sum(m => m.Duration);
-            var videoEncoder = SelectVideoEncoder(dir);
-            if (Media.All(m => m.Type == "Foto"))
-            {
-                ExportPhotosSinglePass(dest, dir, videoEncoder);
-                ValidateExport(dest, expectedDuration);
-                return;
-            }
-
-            var inputs = new StringBuilder();
-            var filters = new StringBuilder();
-            var concatInputs = new StringBuilder();
-            int i = 0;
+            ValidateTimeline(); var expectedDuration = Media.Sum(m => m.Duration); var videoEncoder = SelectVideoEncoder(dir);
+            if (Media.All(m => m.Type == "Foto")) { ExportPhotosSinglePass(dest, dir, videoEncoder); ValidateExport(dest, expectedDuration); return; }
+            var inputs = new StringBuilder(); var filters = new StringBuilder(); var concatInputs = new StringBuilder(); int i = 0;
             foreach (var m in Media)
             {
-                if (m.Type == "Foto") inputs.Append($" -loop 1 -t {F(m.Duration)} -i \"{m.Path}\"");
-                else inputs.Append($" -ss {F(m.TrimIn)} -t {F(m.Duration)} -i \"{m.Path}\"");
-                filters.Append($"[{i}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,fps=30,format=yuv420p,setpts=PTS-STARTPTS[v{i}];");
-                concatInputs.Append($"[v{i}]");
-                i++;
+                if (m.Type == "Foto") inputs.Append($" -loop 1 -t {F(m.Duration)} -i \"{m.Path}\""); else inputs.Append($" -ss {F(m.TrimIn)} -t {F(m.Duration)} -i \"{m.Path}\"");
+                filters.Append($"[{i}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,fps=30,format=yuv420p,setpts=PTS-STARTPTS[v{i}];"); concatInputs.Append($"[v{i}]"); i++;
             }
-            filters.Append($"{concatInputs}concat=n={Media.Count}:v=1:a=0[outv]");
-            var musicIndex = Media.Count;
-            var audioInput = music == null ? "" : $" -stream_loop -1 -i \"{music}\"";
-            var audioMap = music == null ? " -an" : $" -map {musicIndex}:a -c:a aac -b:a 256k -shortest";
-            Ffmpeg($"-y{inputs}{audioInput} -filter_complex \"{filters}\" -map \"[outv]\"{audioMap} {videoEncoder} -movflags +faststart \"{dest}\"");
-            ValidateExport(dest, expectedDuration);
+            filters.Append($"{concatInputs}concat=n={Media.Count}:v=1:a=0[outv]"); var musicIndex = Media.Count; var audioInput = music == null ? "" : $" -stream_loop -1 -i \"{music}\""; var audioMap = music == null ? " -an" : $" -map {musicIndex}:a -c:a aac -b:a 256k -shortest";
+            Ffmpeg($"-y{inputs}{audioInput} -filter_complex \"{filters}\" -map \"[outv]\"{audioMap} {videoEncoder} -movflags +faststart \"{dest}\""); ValidateExport(dest, expectedDuration);
         }
-        finally { try { Directory.Delete(dir, true); } catch { } }
+        finally { try { System.IO.Directory.Delete(dir, true); } catch { } }
     }
 
     void ValidateTimeline()
@@ -189,48 +159,22 @@ public partial class MainWindow : Window
             if (!File.Exists(m.Path)) throw new FileNotFoundException("Material lipsă din proiect.", m.Path);
             if (!double.IsFinite(m.Duration) || m.Duration < .1) throw new Exception("Durată invalidă: " + Path.GetFileName(m.Path));
             if (!double.IsFinite(m.TrimIn) || m.TrimIn < 0) throw new Exception("Trim IN invalid: " + Path.GetFileName(m.Path));
-            if (m.Type == "Video")
-            {
-                var sourceDuration = Probe(m.Path);
-                if (m.TrimIn >= sourceDuration || m.TrimIn + m.Duration > sourceDuration + .05)
-                    throw new Exception($"Trim-ul depășește clipul: {Path.GetFileName(m.Path)} (sursă {F(sourceDuration)}s, IN {F(m.TrimIn)}s, durată {F(m.Duration)}s).");
-            }
+            if (m.Type == "Video") { var sourceDuration = Probe(m.Path); if (m.TrimIn >= sourceDuration || m.TrimIn + m.Duration > sourceDuration + .05) throw new Exception($"Trim-ul depășește clipul: {Path.GetFileName(m.Path)} (sursă {F(sourceDuration)}s, IN {F(m.TrimIn)}s, durată {F(m.Duration)}s)."); }
         }
     }
 
     void ExportPhotosSinglePass(string dest, string dir, string videoEncoder)
     {
-        var inputs = new StringBuilder();
-        var filters = new StringBuilder();
-        var concatInputs = new StringBuilder();
-        for (int i = 0; i < Media.Count; i++)
-        {
-            var m = Media[i];
-            inputs.Append($" -loop 1 -t {F(m.Duration)} -i \"{m.Path}\"");
-            filters.Append($"[{i}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,fps=30,format=yuv420p,setpts=PTS-STARTPTS[v{i}];");
-            concatInputs.Append($"[v{i}]");
-        }
-        filters.Append($"{concatInputs}concat=n={Media.Count}:v=1:a=0[outv]");
-        var filterScript = Path.Combine(dir, "photos-filter.txt");
-        File.WriteAllText(filterScript, filters.ToString(), new UTF8Encoding(false));
-        var musicIndex = Media.Count;
-        var audioInput = music == null ? "" : $" -stream_loop -1 -i \"{music}\"";
-        var audioMap = music == null ? " -an" : $" -map {musicIndex}:a -c:a aac -b:a 256k -shortest";
-        var command = $"-y{inputs}{audioInput} -filter_complex_script \"{filterScript}\" -map \"[outv]\"{audioMap} {videoEncoder} -movflags +faststart \"{dest}\"";
-        if (command.Length > 30000)
-            throw new Exception("Exportul conține prea multe căi de fișiere pentru limita Windows. Mută temporar fotografiile într-un folder cu o cale mai scurtă.");
-        Ffmpeg(command);
+        var inputs = new StringBuilder(); var filters = new StringBuilder(); var concatInputs = new StringBuilder();
+        for (int i = 0; i < Media.Count; i++) { var m = Media[i]; inputs.Append($" -loop 1 -t {F(m.Duration)} -i \"{m.Path}\""); filters.Append($"[{i}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,fps=30,format=yuv420p,setpts=PTS-STARTPTS[v{i}];"); concatInputs.Append($"[v{i}]"); }
+        filters.Append($"{concatInputs}concat=n={Media.Count}:v=1:a=0[outv]"); var filterScript = Path.Combine(dir, "photos-filter.txt"); File.WriteAllText(filterScript, filters.ToString(), new UTF8Encoding(false)); var musicIndex = Media.Count; var audioInput = music == null ? "" : $" -stream_loop -1 -i \"{music}\""; var audioMap = music == null ? " -an" : $" -map {musicIndex}:a -c:a aac -b:a 256k -shortest"; var command = $"-y{inputs}{audioInput} -filter_complex_script \"{filterScript}\" -map \"[outv]\"{audioMap} {videoEncoder} -movflags +faststart \"{dest}\"";
+        if (command.Length > 30000) throw new Exception("Exportul conține prea multe căi de fișiere pentru limita Windows. Mută temporar fotografiile într-un folder cu o cale mai scurtă."); Ffmpeg(command);
     }
 
     static string SelectVideoEncoder(string dir)
     {
         var probe = Path.Combine(dir, "nvenc-probe.mp4");
-        try
-        {
-            Run("ffmpeg.exe", $"-y -f lavfi -i color=c=black:s=64x64:r=1 -frames:v 1 -c:v h264_nvenc -preset p4 \"{probe}\"", out var code);
-            if (code == 0 && File.Exists(probe) && new FileInfo(probe).Length > 0)
-                return "-c:v h264_nvenc -preset p4 -cq 19 -b:v 0";
-        }
+        try { Run("ffmpeg.exe", $"-y -f lavfi -i color=c=black:s=64x64:r=1 -frames:v 1 -c:v h264_nvenc -preset p4 \"{probe}\"", out var code); if (code == 0 && File.Exists(probe) && new FileInfo(probe).Length > 0) return "-c:v h264_nvenc -preset p4 -cq 19 -b:v 0"; }
         catch { }
         finally { try { if (File.Exists(probe)) File.Delete(probe); } catch { } }
         return "-c:v libx264 -preset fast -crf 19";
@@ -238,15 +182,9 @@ public partial class MainWindow : Window
 
     static void ValidateExport(string path, double expectedDuration)
     {
-        if (!File.Exists(path) || new FileInfo(path).Length < 1024)
-            throw new Exception("Export invalid: fișierul MP4 lipsește sau este gol.");
-        var output = Run("ffprobe.exe", $"-v error -select_streams v:0 -show_entries stream=codec_name,width,height -show_entries format=duration -of default=noprint_wrappers=1 \"{path}\"", out var code);
-        var durationLine = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault(x => x.StartsWith("duration=", StringComparison.OrdinalIgnoreCase));
-        var durationOk = durationLine != null && double.TryParse(durationLine.AsSpan("duration=".Length), NumberStyles.Float, CultureInfo.InvariantCulture, out var actualDuration) && actualDuration >= expectedDuration - .25 && actualDuration <= expectedDuration + .75;
-        if (code != 0 || !output.Contains("codec_name=h264", StringComparison.OrdinalIgnoreCase) ||
-            !output.Contains("width=1920", StringComparison.OrdinalIgnoreCase) ||
-            !output.Contains("height=1080", StringComparison.OrdinalIgnoreCase) || !durationOk)
-            throw new Exception($"Export invalid: verificarea ffprobe a eșuat (durată așteptată {F(expectedDuration)}s).\n" + output);
+        if (!File.Exists(path) || new FileInfo(path).Length < 1024) throw new Exception("Export invalid: fișierul MP4 lipsește sau este gol.");
+        var output = Run("ffprobe.exe", $"-v error -select_streams v:0 -show_entries stream=codec_name,width,height -show_entries format=duration -of default=noprint_wrappers=1 \"{path}\"", out var code); var durationLine = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault(x => x.StartsWith("duration=", StringComparison.OrdinalIgnoreCase)); var durationOk = durationLine != null && double.TryParse(durationLine.AsSpan("duration=".Length), NumberStyles.Float, CultureInfo.InvariantCulture, out var actualDuration) && actualDuration >= expectedDuration - .25 && actualDuration <= expectedDuration + .75;
+        if (code != 0 || !output.Contains("codec_name=h264", StringComparison.OrdinalIgnoreCase) || !output.Contains("width=1920", StringComparison.OrdinalIgnoreCase) || !output.Contains("height=1080", StringComparison.OrdinalIgnoreCase) || !durationOk) throw new Exception($"Export invalid: verificarea ffprobe a eșuat (durată așteptată {F(expectedDuration)}s).\n" + output);
     }
 
     static string F(double n) => n.ToString("0.###", CultureInfo.InvariantCulture);
@@ -254,30 +192,14 @@ public partial class MainWindow : Window
     static string Run(string exe, string args, out int code)
     {
         var path = Path.Combine(AppContext.BaseDirectory, "Tools", exe); if (!File.Exists(path)) throw new FileNotFoundException("Lipsește " + exe, path);
-        using var p = new Process();
-        p.StartInfo = new ProcessStartInfo(path) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
-        foreach (var arg in SplitArguments(args)) p.StartInfo.ArgumentList.Add(arg);
-        var sb = new StringBuilder(); p.OutputDataReceived += (_, e) => { if (e.Data != null) lock (sb) sb.AppendLine(e.Data); }; p.ErrorDataReceived += (_, e) => { if (e.Data != null) lock (sb) sb.AppendLine(e.Data); };
-        p.Start(); p.BeginOutputReadLine(); p.BeginErrorReadLine(); p.WaitForExit(); code = p.ExitCode; lock (sb) return sb.ToString();
+        using var p = new Process(); p.StartInfo = new ProcessStartInfo(path) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true }; foreach (var arg in SplitArguments(args)) p.StartInfo.ArgumentList.Add(arg); var sb = new StringBuilder(); p.OutputDataReceived += (_, e) => { if (e.Data != null) lock (sb) sb.AppendLine(e.Data); }; p.ErrorDataReceived += (_, e) => { if (e.Data != null) lock (sb) sb.AppendLine(e.Data); }; p.Start(); p.BeginOutputReadLine(); p.BeginErrorReadLine(); p.WaitForExit(); code = p.ExitCode; lock (sb) return sb.ToString();
     }
 
     static IEnumerable<string> SplitArguments(string commandLine)
     {
-        var current = new StringBuilder();
-        bool quoted = false;
-        for (int i = 0; i < commandLine.Length; i++)
-        {
-            var ch = commandLine[i];
-            if (ch == '"') { quoted = !quoted; continue; }
-            if (char.IsWhiteSpace(ch) && !quoted)
-            {
-                if (current.Length > 0) { yield return current.ToString(); current.Clear(); }
-                continue;
-            }
-            current.Append(ch);
-        }
-        if (quoted) throw new ArgumentException("Linie FFmpeg cu ghilimele neînchise.");
-        if (current.Length > 0) yield return current.ToString();
+        var current = new StringBuilder(); bool quoted = false;
+        for (int i = 0; i < commandLine.Length; i++) { var ch = commandLine[i]; if (ch == '"') { quoted = !quoted; continue; } if (char.IsWhiteSpace(ch) && !quoted) { if (current.Length > 0) { yield return current.ToString(); current.Clear(); } continue; } current.Append(ch); }
+        if (quoted) throw new ArgumentException("Linie FFmpeg cu ghilimele neînchise."); if (current.Length > 0) yield return current.ToString();
     }
 
     void Window_PreviewDragOver(object sender, DragEventArgs e) { e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None; e.Handled = true; }
@@ -286,7 +208,17 @@ public partial class MainWindow : Window
 
 public class MediaItem
 {
-    public string Path { get; set; } = ""; public string Name => System.IO.Path.GetFileName(Path); public string Type { get; set; } = ""; public DateTime Date { get; set; }
-    public double Duration { get; set; } = 4; public double TrimIn { get; set; } public bool Mute { get; set; } public ImageSource? Thumbnail { get; set; }
-    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged; public void Changed(string n) => PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(n));
+    public string Path { get; set; } = "";
+    public string Name => System.IO.Path.GetFileName(Path);
+    public string Type { get; set; } = "";
+    public DateTime SourceDate { get; set; }
+    public double CaptureTimeOffsetSeconds { get; set; }
+    public DateTime EffectiveDate => CaptureTimeOffset.Apply(SourceDate, CaptureTimeOffsetSeconds);
+    public DateTime Date { get => EffectiveDate; set => SourceDate = value; }
+    public double Duration { get; set; } = 4;
+    public double TrimIn { get; set; }
+    public bool Mute { get; set; }
+    public ImageSource? Thumbnail { get; set; }
+    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+    public void Changed(string n) => PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(n));
 }
