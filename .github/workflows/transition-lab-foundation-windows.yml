@@ -136,6 +136,20 @@ jobs:
           if (-not $exe) { throw "Transition Lab executable was not produced" }
           $plugin = Get-ChildItem -Path shotcut-fork\build -Recurse -Filter transitionlab_panels.dll | Select-Object -First 1
           if (-not $plugin) { throw "Articulated panels plugin was not produced" }
+          $melt = Get-ChildItem -Path $exe.Directory.FullName -Filter melt.exe | Select-Object -First 1
+          if (-not $melt) { throw "MLT runtime executable was not packaged" }
+          $queryReport = Join-Path (Get-Location).Path "transition-lab-mlt-transitions.txt"
+          Push-Location $exe.Directory.FullName
+          try {
+            $transitions = & $melt.FullName -query transitions 2>&1
+            if ($LASTEXITCODE -ne 0) { throw "MLT transition query failed with exit code $LASTEXITCODE" }
+            $transitions | Out-File $queryReport
+            if ($transitions -notmatch 'frei0r\.transitionlab_panels') {
+              throw "MLT did not discover frei0r.transitionlab_panels"
+            }
+          } finally {
+            Pop-Location
+          }
           Get-FileHash $exe.FullName -Algorithm SHA256 | Format-List | Out-File transition-lab-foundation-smoke.txt
           Get-FileHash $plugin.FullName -Algorithm SHA256 | Format-List | Out-File transition-lab-panels-smoke.txt
           Compress-Archive -Path shotcut-fork\build\Shotcut -DestinationPath transition-lab-foundation-windows-x64.zip -Force
@@ -147,5 +161,6 @@ jobs:
             transition-lab-foundation-windows-x64.zip
             transition-lab-foundation-smoke.txt
             transition-lab-panels-smoke.txt
+            transition-lab-mlt-transitions.txt
           if-no-files-found: error
           retention-days: 30
