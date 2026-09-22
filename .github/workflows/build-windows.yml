@@ -129,6 +129,20 @@ jobs:
           $probe=& $ffprobe -v error -show_entries stream=codec_type,codec_name,width,height -of default=noprint_wrappers=1 $out
           if ($LASTEXITCODE -ne 0 -or -not ($probe -match 'codec_type=video') -or -not ($probe -match 'codec_name=h264') -or -not ($probe -match 'codec_type=audio') -or -not ($probe -match 'codec_name=aac')) { throw 'FAIL: CARUSEL plus music stream validation failed' }
 
+      - name: Benchmark 120-photo software export
+        shell: pwsh
+        run: |
+          $ffmpeg='.\artifacts\SlideshowCreator-App\Tools\ffmpeg.exe'
+          $root='.\artifacts\carousel120'
+          $list=Join-Path $root 'list.txt'
+          if (-not (Test-Path $list)) { throw 'FAIL: 120-photo stress material missing before benchmark' }
+          $out=Join-Path $root 'benchmark120.mp4'
+          $sw=[Diagnostics.Stopwatch]::StartNew()
+          & $ffmpeg -loglevel error -y -f concat -safe 0 -i $list -f lavfi -i 'sine=frequency=440:sample_rate=48000:duration=12' -vf 'scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,fps=30,format=yuv420p' -map 0:v -map 1:a -c:v libx264 -preset ultrafast -c:a aac -b:a 256k -shortest $out
+          $sw.Stop()
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $out)) { throw 'FAIL: 120-photo benchmark export failed' }
+          "SOFTWARE_BENCHMARK_120_PHOTOS_SECONDS=$([math]::Round($sw.Elapsed.TotalSeconds,2))" | Tee-Object -FilePath '.\artifacts\benchmark120.txt'
+
       - name: Upload runnable salvage application
         uses: actions/upload-artifact@v4
         with:
