@@ -95,7 +95,7 @@ jobs:
           $probe=& $ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,width,height -show_entries format=duration -of default=noprint_wrappers=1 $out
           if ($LASTEXITCODE -ne 0 -or -not ($probe -match 'codec_name=h264') -or -not ($probe -match 'width=1920') -or -not ($probe -match 'height=1080')) { throw 'FAIL: full-photo CARUSEL plane ffprobe validation failed' }
 
-      - name: Software stress CARUSEL with 120 photos
+      - name: Software stress simple concat with 120 synthetic photos
         shell: pwsh
         run: |
           $ffmpeg='.\artifacts\SlideshowCreator-App\Tools\ffmpeg.exe'
@@ -118,7 +118,7 @@ jobs:
           $probe=& $ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,width,height -of default=noprint_wrappers=1 $out
           if ($LASTEXITCODE -ne 0 -or -not ($probe -match 'codec_name=h264') -or -not ($probe -match 'width=1920') -or -not ($probe -match 'height=1080')) { throw 'FAIL: 120-photo stress ffprobe validation failed' }
 
-      - name: Software validate CARUSEL with music
+      - name: Software validate H264 plus AAC muxing
         shell: pwsh
         run: |
           $ffmpeg='.\artifacts\SlideshowCreator-App\Tools\ffmpeg.exe'
@@ -129,7 +129,7 @@ jobs:
           $probe=& $ffprobe -v error -show_entries stream=codec_type,codec_name,width,height -of default=noprint_wrappers=1 $out
           if ($LASTEXITCODE -ne 0 -or -not ($probe -match 'codec_type=video') -or -not ($probe -match 'codec_name=h264') -or -not ($probe -match 'codec_type=audio') -or -not ($probe -match 'codec_name=aac')) { throw 'FAIL: CARUSEL plus music stream validation failed' }
 
-      - name: Benchmark 120-photo software export
+      - name: Benchmark 120-photo synthetic concat export
         shell: pwsh
         run: |
           $ffmpeg='.\artifacts\SlideshowCreator-App\Tools\ffmpeg.exe'
@@ -166,118 +166,9 @@ jobs:
           name: SlideshowCreator-App-win-x64
           path: artifacts/SlideshowCreator-App
           if-no-files-found: error
-      - name: Acquire NVENC 13.1 headers
-        shell: pwsh
-        run: |
-          git clone https://github.com/FFmpeg/nv-codec-headers.git .\\artifacts\\nv-codec-headers
-          git -C .\\artifacts\\nv-codec-headers checkout eddcea9e27f6b772057c9b3f87de2cc1737faffc
-          if (-not (Test-Path '.\\artifacts\\nv-codec-headers\\include\\ffnvcodec\\nvEncodeAPI.h')) { throw 'nvEncodeAPI.h missing' }
-
-      - name: Compile native D3D12 plus REAL NVENC branch
-        shell: pwsh
-        run: |
-          cmake -S .\\src\\Motor2.Native -B .\\artifacts\\motor2-native -A x64 -DNVENC_SDK_INCLUDE="$pwd\\artifacts\\nv-codec-headers\\include\\ffnvcodec"
-          cmake --build .\\artifacts\\motor2-native --config Release
-          if (-not (Test-Path '.\\artifacts\\motor2-native\\Release\\Motor2Native.dll')) { throw 'Motor2Native.dll missing' }
-
-      - name: Compile hardware gate
-        shell: pwsh
-        run: |
-          dotnet restore .\src\Motor2.HardwareGate\Motor2.HardwareGate.csproj
-          dotnet build .\src\Motor2.HardwareGate\Motor2.HardwareGate.csproj -c Release --no-restore
-
-      - name: Publish and VERIFY complete self-contained hardware gate
-        shell: pwsh
-        run: |
-          dotnet publish .\src\Motor2.HardwareGate\Motor2.HardwareGate.csproj -c Release -r win-x64 --self-contained true -p:UseAppHost=true -o .\artifacts\Motor2-HardwareGate
-          Copy-Item '.\artifacts\motor2-native\Release\Motor2Native.dll' '.\artifacts\Motor2-HardwareGate\Motor2Native.dll' -Force
-          $exe='.\artifacts\Motor2-HardwareGate\Motor2.HardwareGate.exe'
-          $native='.\artifacts\Motor2-HardwareGate\Motor2Native.dll'
-          if (-not (Test-Path $exe)) { throw 'FAIL: Motor2.HardwareGate.exe missing from deliverable' }
-          if (-not (Test-Path $native)) { throw 'FAIL: Motor2Native.dll missing from deliverable' }
-          Write-Host 'DELIVERABLE CONTENTS:'
-          Get-ChildItem '.\artifacts\Motor2-HardwareGate' | Select-Object Name,Length
-          Write-Host 'EXE SHA256:'
-          Get-FileHash $exe -Algorithm SHA256
-          Write-Host 'NATIVE SHA256:'
-          Get-FileHash $native -Algorithm SHA256
-
-      - name: Build ONE-EXE Hardware Gate launcher
-        shell: pwsh
-        run: |
-          $stage = Join-Path $pwd 'artifacts\Motor2-HardwareGate'
-          $payload = Join-Path $pwd 'artifacts\Motor2-HardwareGate-payload.zip'
-          Compress-Archive -Path "$stage\*" -DestinationPath $payload -Force
-          $proj = Join-Path $pwd 'artifacts\OneExeLauncher'
-          New-Item -ItemType Directory -Force -Path $proj | Out-Null
-          Copy-Item $payload (Join-Path $proj 'payload.zip') -Force
-          @'
-          <Project Sdk="Microsoft.NET.Sdk">
-            <PropertyGroup>
-              <OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework>
-              <RuntimeIdentifier>win-x64</RuntimeIdentifier><SelfContained>true</SelfContained>
-              <PublishSingleFile>true</PublishSingleFile><EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
-              <AssemblyName>Motor2_HardwareGate_RTX4060</AssemblyName>
-            </PropertyGroup>
-            <ItemGroup><EmbeddedResource Include="payload.zip" LogicalName="payload.zip" /></ItemGroup>
-          </Project>
-          '@ | Set-Content (Join-Path $proj 'OneExeLauncher.csproj')
-          @'
-          using System;
-          using System.Diagnostics;
-          using System.IO;
-          using System.IO.Compression;
-          using System.Reflection;
-          class Program {
-            [STAThread] static int Main(string[] args) {
-              var root=Path.Combine(Path.GetTempPath(),"Motor2HardwareGate_"+Guid.NewGuid().ToString("N"));
-              Directory.CreateDirectory(root);
-              try {
-                using var s=Assembly.GetExecutingAssembly().GetManifestResourceStream("payload.zip") ?? throw new Exception("Embedded payload missing.");
-                using var z=new ZipArchive(s,ZipArchiveMode.Read);
-                z.ExtractToDirectory(root);
-                var exe=Path.Combine(root,"Motor2.HardwareGate.exe");
-                if(!File.Exists(exe)) throw new FileNotFoundException("Embedded Hardware Gate missing.",exe);
-                var native=Path.Combine(root,"Motor2Native.dll");
-                if(!File.Exists(native)) throw new FileNotFoundException("Embedded Motor2Native.dll missing.",native);
-                if(args.Length>0 && args[0]=="--verify-payload") { Console.WriteLine("PASS: embedded payload extracted; child EXE and native DLL found."); return 0; }
-                var p=Process.Start(new ProcessStartInfo(exe){UseShellExecute=false,WorkingDirectory=root}) ?? throw new Exception("Cannot start embedded gate.");
-                p.WaitForExit();
-                return p.ExitCode;
-              } catch(Exception ex) {
-                Console.Error.WriteLine("FAIL launcher: "+ex);
-                Console.WriteLine("Apasa ENTER pentru inchidere...");
-                Console.ReadLine();
-                return 2;
-              } finally {
-                try { if(Directory.Exists(root)) Directory.Delete(root,true); } catch { }
-              }
-            }
-          }
-          '@ | Set-Content (Join-Path $proj 'Program.cs')
-          dotnet publish (Join-Path $proj 'OneExeLauncher.csproj') -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o (Join-Path $pwd 'artifacts\Motor2-HardwareGate-ONE-EXE')
-          $launcher=Join-Path $pwd 'artifacts\Motor2-HardwareGate-ONE-EXE\Motor2_HardwareGate_RTX4060.exe'
-          if (-not (Test-Path $launcher)) { throw 'FAIL: ONE-EXE launcher missing' }
-          & $launcher --verify-payload
-          if ($LASTEXITCODE -ne 0) { throw 'FAIL: ONE-EXE runtime payload verification failed' }
-          Get-FileHash $launcher -Algorithm SHA256
-          if ((Get-Item $launcher).Length -lt 1000000) { throw 'FAIL: ONE-EXE launcher unexpectedly small' }
-
-      # Legacy Motor2 Hardware Gate release publication is intentionally quarantined.
-      # It is not part of the salvage application's product validation path.
-      - name: Upload ONE-EXE Hardware Gate
-        uses: actions/upload-artifact@v4
-        with:
-          name: Motor2-HardwareGate-ONE-EXE
-          path: artifacts/Motor2-HardwareGate-ONE-EXE/Motor2_HardwareGate_RTX4060.exe
-          if-no-files-found: error
-
-      - name: Upload hardware gate managed package
-        uses: actions/upload-artifact@v4
-        with:
-          name: Motor2-HardwareGate-win-x64-REAL-NVENC
-          path: artifacts/Motor2-HardwareGate
-          if-no-files-found: error
+      # Legacy low-level Motor2.Native / Hardware Gate pipeline is quarantined from
+      # salvage-product CI. Keep sources in the repository, but do not let that
+      # experimental path block validation of the application users will run.
 
       - name: Architecture guard
         shell: pwsh
