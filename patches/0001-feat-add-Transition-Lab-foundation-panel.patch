@@ -1,0 +1,366 @@
+From 0bf2d9e774902430038988bab99376fd9cd795f9 Mon Sep 17 00:00:00 2001
+From: Transition Lab CI <transition-lab@users.noreply.github.com>
+Date: Tue, 22 Sep 2026 02:49:45 -0700
+Subject: [PATCH] feat: add Transition Lab foundation panel
+
+---
+ src/CMakeLists.txt              |   1 +
+ src/docks/transitionlabdock.cpp | 177 ++++++++++++++++++++++++++++++++
+ src/docks/transitionlabdock.h   |  43 ++++++++
+ src/main.cpp                    |   2 +-
+ src/mainwindow.cpp              |  37 +++++++
+ src/mainwindow.h                |   3 +
+ 6 files changed, 262 insertions(+), 1 deletion(-)
+ create mode 100644 src/docks/transitionlabdock.cpp
+ create mode 100644 src/docks/transitionlabdock.h
+
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 3721536..279ec5d 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -67,6 +67,7 @@ add_executable(shotcut WIN32 MACOSX_BUNDLE
+   docks/scopedock.cpp docks/scopedock.h
+   docks/subtitlesdock.cpp docks/subtitlesdock.h
+   docks/timelinedock.cpp docks/timelinedock.h
++  docks/transitionlabdock.cpp docks/transitionlabdock.h
+   FlatpakWrapperGenerator.cpp FlatpakWrapperGenerator.h
+   gpuinfo.cpp gpuinfo.h
+   htmlgenerator.h htmlgenerator.cpp
+diff --git a/src/docks/transitionlabdock.cpp b/src/docks/transitionlabdock.cpp
+new file mode 100644
+index 0000000..3f1e443
+--- /dev/null
++++ b/src/docks/transitionlabdock.cpp
+@@ -0,0 +1,177 @@
++/*
++ * Copyright (c) 2026 Transition Lab contributors
++ *
++ * This program is free software: you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation, either version 3 of the License, or
++ * (at your option) any later version.
++ */
++
++#include "transitionlabdock.h"
++
++#include <QComboBox>
++#include <QDoubleSpinBox>
++#include <QFileDialog>
++#include <QFileInfo>
++#include <QFormLayout>
++#include <QGroupBox>
++#include <QHBoxLayout>
++#include <QIcon>
++#include <QLabel>
++#include <QListWidget>
++#include <QPushButton>
++#include <QSysInfo>
++#include <QThread>
++#include <QVBoxLayout>
++
++TransitionLabDock::TransitionLabDock(QWidget *parent)
++    : QDockWidget(tr("Transition Lab"), parent)
++{
++    setObjectName(QStringLiteral("TransitionLabDock"));
++    setMinimumWidth(330);
++
++    auto *container = new QWidget(this);
++    auto *layout = new QVBoxLayout(container);
++
++    auto *title = new QLabel(tr("TRANSITION LAB 0.1.0"), container);
++    QFont titleFont = title->font();
++    titleFont.setBold(true);
++    titleFont.setPointSize(titleFont.pointSize() + 2);
++    title->setFont(titleFont);
++    layout->addWidget(title);
++
++    auto *importRow = new QHBoxLayout;
++    auto *photoButton = new QPushButton(tr("Import photos"), container);
++    auto *audioButton = new QPushButton(tr("Import music"), container);
++    importRow->addWidget(photoButton);
++    importRow->addWidget(audioButton);
++    layout->addLayout(importRow);
++
++    m_photoList = new QListWidget(container);
++    m_photoList->setViewMode(QListView::IconMode);
++    m_photoList->setIconSize(QSize(112, 72));
++    m_photoList->setResizeMode(QListView::Adjust);
++    m_photoList->setMovement(QListView::Snap);
++    m_photoList->setDragDropMode(QAbstractItemView::InternalMove);
++    m_photoList->setDefaultDropAction(Qt::MoveAction);
++    m_photoList->setSelectionMode(QAbstractItemView::ExtendedSelection);
++    m_photoList->setToolTip(tr("Drag thumbnails to change their order."));
++    layout->addWidget(m_photoList, 1);
++
++    auto *transitionBox = new QGroupBox(tr("Transition between photos"), container);
++    auto *transitionLayout = new QFormLayout(transitionBox);
++    auto *transition = new QComboBox(transitionBox);
++    transition->addItems({tr("Articulated panels"),
++                          tr("3D accordion"),
++                          tr("Rotating cubes"),
++                          tr("Rectangular mosaic"),
++                          tr("Four-zone mosaic"),
++                          tr("Vertical strips"),
++                          tr("Horizontal blinds"),
++                          tr("Offset slices"),
++                          tr("Radial aperture"),
++                          tr("Segmented ring"),
++                          tr("Diagonal shards"),
++                          tr("Photo wall"),
++                          tr("Floating frames"),
++                          tr("Frame fan"),
++                          tr("Depth blocks")});
++    auto *duration = new QDoubleSpinBox(transitionBox);
++    duration->setRange(0.20, 10.0);
++    duration->setValue(1.50);
++    duration->setSuffix(tr(" s"));
++    duration->setSingleStep(0.10);
++    auto *direction = new QComboBox(transitionBox);
++    direction->addItems({tr("Automatic"), tr("Left to right"), tr("Right to left"),
++                         tr("Top to bottom"), tr("Bottom to top")});
++    transitionLayout->addRow(tr("Family"), transition);
++    transitionLayout->addRow(tr("Duration"), duration);
++    transitionLayout->addRow(tr("Direction"), direction);
++    layout->addWidget(transitionBox);
++
++    auto *audioBox = new QGroupBox(tr("Music"), container);
++    auto *audioLayout = new QFormLayout(audioBox);
++    m_audioLabel = new QLabel(tr("No music selected"), audioBox);
++    m_audioLabel->setWordWrap(true);
++    m_fadeIn = new QDoubleSpinBox(audioBox);
++    m_fadeOut = new QDoubleSpinBox(audioBox);
++    for (auto *spinBox : {m_fadeIn, m_fadeOut}) {
++        spinBox->setRange(0.0, 30.0);
++        spinBox->setValue(2.0);
++        spinBox->setSuffix(tr(" s"));
++        spinBox->setSingleStep(0.25);
++    }
++    audioLayout->addRow(tr("File"), m_audioLabel);
++    audioLayout->addRow(tr("Fade In"), m_fadeIn);
++    audioLayout->addRow(tr("Fade Out"), m_fadeOut);
++    layout->addWidget(audioBox);
++
++    auto *diagnosticsBox = new QGroupBox(tr("Diagnostics"), container);
++    auto *diagnosticsLayout = new QVBoxLayout(diagnosticsBox);
++    m_diagnosticsLabel = new QLabel(diagnosticsBox);
++    m_diagnosticsLabel->setWordWrap(true);
++    diagnosticsLayout->addWidget(m_diagnosticsLabel);
++    layout->addWidget(diagnosticsBox);
++
++    auto *exportButton = new QPushButton(tr("Export MP4 Full HD"), container);
++    exportButton->setEnabled(false);
++    exportButton->setToolTip(tr("Enabled after the export pipeline validation succeeds."));
++    layout->addWidget(exportButton);
++
++    setWidget(container);
++    connect(photoButton, &QPushButton::clicked, this, [this] { importPhotos(); });
++    connect(audioButton, &QPushButton::clicked, this, [this] { importAudio(); });
++    refreshDiagnostics();
++}
++
++QStringList TransitionLabDock::photoFiles() const
++{
++    QStringList result;
++    for (int row = 0; row < m_photoList->count(); ++row)
++        result << m_photoList->item(row)->data(Qt::UserRole).toString();
++    return result;
++}
++
++double TransitionLabDock::fadeInSeconds() const
++{
++    return m_fadeIn->value();
++}
++
++double TransitionLabDock::fadeOutSeconds() const
++{
++    return m_fadeOut->value();
++}
++
++void TransitionLabDock::importPhotos()
++{
++    const QStringList files = QFileDialog::getOpenFileNames(
++        this, tr("Import photos"), QString(), tr("Photos (*.jpg *.jpeg *.png)"));
++    for (const QString &file : files) {
++        auto *item = new QListWidgetItem(QIcon(file), QFileInfo(file).fileName());
++        item->setData(Qt::UserRole, file);
++        item->setToolTip(file);
++        m_photoList->addItem(item);
++    }
++}
++
++void TransitionLabDock::importAudio()
++{
++    const QString file = QFileDialog::getOpenFileName(
++        this, tr("Import music"), QString(), tr("Audio (*.mp3 *.wav *.m4a *.aac *.flac *.ogg)"));
++    if (file.isEmpty())
++        return;
++    m_audioFile = file;
++    m_audioLabel->setText(QFileInfo(file).fileName());
++    m_audioLabel->setToolTip(file);
++}
++
++void TransitionLabDock::refreshDiagnostics()
++{
++    const QString cpu = QSysInfo::currentCpuArchitecture();
++    const int threads = QThread::idealThreadCount();
++    m_diagnosticsLabel->setText(
++        tr("CPU: %1 (%2 threads)\nGPU: detection pending\nRAM: detection pending\n"
++           "Encoder: NVIDIA NVENC preferred; software fallback must be reported\nFPS: 25 / 30")
++            .arg(cpu)
++            .arg(threads));
++}
+diff --git a/src/docks/transitionlabdock.h b/src/docks/transitionlabdock.h
+new file mode 100644
+index 0000000..58ff87b
+--- /dev/null
++++ b/src/docks/transitionlabdock.h
+@@ -0,0 +1,43 @@
++/*
++ * Copyright (c) 2026 Transition Lab contributors
++ *
++ * This program is free software: you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation, either version 3 of the License, or
++ * (at your option) any later version.
++ */
++
++#ifndef TRANSITIONLABDOCK_H
++#define TRANSITIONLABDOCK_H
++
++#include <QDockWidget>
++#include <QStringList>
++
++class QLabel;
++class QListWidget;
++class QDoubleSpinBox;
++
++class TransitionLabDock : public QDockWidget
++{
++public:
++    explicit TransitionLabDock(QWidget *parent = nullptr);
++
++    QStringList photoFiles() const;
++    QString audioFile() const { return m_audioFile; }
++    double fadeInSeconds() const;
++    double fadeOutSeconds() const;
++
++private:
++    void importPhotos();
++    void importAudio();
++    void refreshDiagnostics();
++
++    QListWidget *m_photoList{nullptr};
++    QLabel *m_audioLabel{nullptr};
++    QLabel *m_diagnosticsLabel{nullptr};
++    QDoubleSpinBox *m_fadeIn{nullptr};
++    QDoubleSpinBox *m_fadeOut{nullptr};
++    QString m_audioFile;
++};
++
++#endif
+diff --git a/src/main.cpp b/src/main.cpp
+index 7f39d83..d818da8 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -196,7 +196,7 @@ public:
+ #else
+         setOrganizationDomain("meltytech.com");
+ #endif
+-        setApplicationName("Shotcut");
++        setApplicationName("Transition Lab");
+         setApplicationVersion(SHOTCUT_VERSION);
+ 
+         // Process command line options.
+diff --git a/src/mainwindow.cpp b/src/mainwindow.cpp
+index ad46531..3fb1eb0 100644
+--- a/src/mainwindow.cpp
++++ b/src/mainwindow.cpp
+@@ -49,6 +49,7 @@
+ #include "docks/recentdock.h"
+ #include "docks/subtitlesdock.h"
+ #include "docks/timelinedock.h"
++#include "docks/transitionlabdock.h"
+ #include "gpuinfo.h"
+ #include "hdrpreviewwindow.h"
+ #include "jobqueue.h"
+@@ -237,6 +238,7 @@ MainWindow::MainWindow()
+     readWindowSettings();
+     setupActions();
+     setupLayoutSwitcher();
++    applyTransitionLabMode();
+ 
+     setFocus();
+     setCurrentFile("");
+@@ -268,6 +270,41 @@ void MainWindow::connectFocusSignals()
+     }
+ }
+ 
++void MainWindow::applyTransitionLabMode()
++{
++    m_transitionLabDock = new TransitionLabDock(this);
++    addDockWidget(Qt::LeftDockWidgetArea, m_transitionLabDock);
++    m_transitionLabDock->show();
++
++    const QList<QDockWidget *> hiddenDocks = {m_propertiesDock,
++                                              m_playlistDock,
++                                              m_filtersDock,
++                                              m_notesDock,
++                                              m_subtitlesDock,
++                                              m_recentDock,
++                                              m_historyDock,
++                                              m_filesDock,
++                                              m_elementsDock,
++                                              m_keyframesDock,
++                                              m_markersDock};
++    for (QDockWidget *dock : hiddenDocks) {
++        if (dock) {
++            dock->hide();
++            dock->toggleViewAction()->setVisible(false);
++        }
++    }
++
++    m_timelineDock->show();
++    m_encodeDock->show();
++    m_jobsDock->show();
++    ui->menuView->setVisible(false);
++    ui->menuHelp->setVisible(false);
++    ui->actionOpenOther->setVisible(false);
++    ui->actionScreenRecording->setVisible(false);
++    ui->actionScreenSnapshot->setVisible(false);
++    ui->actionSubtitles->setVisible(false);
++}
++
+ void MainWindow::registerDebugCallback()
+ {
+     if (!qEnvironmentVariableIsEmpty("EVENT_DEBUG"))
+diff --git a/src/mainwindow.h b/src/mainwindow.h
+index 5fa9b32..0d4548c 100644
+--- a/src/mainwindow.h
++++ b/src/mainwindow.h
+@@ -49,6 +49,7 @@ class ElementsDock;
+ class FilesDock;
+ class FiltersDock;
+ class TimelineDock;
++class TransitionLabDock;
+ class AutoSaveFile;
+ class QNetworkReply;
+ class KeyframesDock;
+@@ -148,6 +149,7 @@ private:
+     void setupLayoutSwitcher();
+     void centerLayoutInRemainingToolbarSpace();
+     void setupAndConnectDocks();
++    void applyTransitionLabMode();
+     void setupMenuFile();
+     void setupMenuView();
+     void connectVideoWidgetSignals();
+@@ -193,6 +195,7 @@ private:
+     JobsDock *m_jobsDock;
+     PlaylistDock *m_playlistDock;
+     TimelineDock *m_timelineDock;
++    TransitionLabDock *m_transitionLabDock{nullptr};
+     QString m_currentFile;
+     bool m_isKKeyPressed;
+     QUndoStack *m_undoStack;
+-- 
+2.51.1
+
