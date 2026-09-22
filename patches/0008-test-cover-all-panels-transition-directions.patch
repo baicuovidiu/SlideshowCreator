@@ -1,0 +1,64 @@
+From 20e852961eed514a9178a9b427ac840590ef241e Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Tue, 22 Sep 2026 17:40:08 -0400
+Subject: [PATCH] test: cover all panels transition directions
+
+---
+ src/transitionlab/frei0r/panels_test.c | 32 +++++++++++++++-----------
+ 1 file changed, 19 insertions(+), 13 deletions(-)
+
+diff --git a/src/transitionlab/frei0r/panels_test.c b/src/transitionlab/frei0r/panels_test.c
+index a36a829..d64702a 100644
+--- a/src/transitionlab/frei0r/panels_test.c
++++ b/src/transitionlab/frei0r/panels_test.c
+@@ -31,9 +31,6 @@ int main(void)
+     f0r_instance_t instance = f0r_construct(width, height);
+     double progress = 0.0;
+     double direction = 0.0;
+-    int background = 0;
+-    int first_pixels = 0;
+-    int second_pixels = 0;
+ 
+     if (!instance)
+         return 10;
+@@ -54,19 +51,28 @@ int main(void)
+         return 12;
+ 
+     progress = 0.5;
+-    direction = 0.8;
+     f0r_set_param_value(instance, &progress, 0);
+-    f0r_set_param_value(instance, &direction, 1);
+-    f0r_update2(instance, 0.0, first, second, NULL, output);
+-    for (int i = 0; i < pixels; ++i) {
+-        background += output[i] == 0xff101010u;
+-        first_pixels += (output[i] & 0xffu) > 0x20u;
+-        second_pixels += ((output[i] >> 8) & 0xffu) > 0x20u;
++    for (int variant = 0; variant < 4; ++variant) {
++        int background = 0;
++        int first_pixels = 0;
++        int second_pixels = 0;
++
++        direction = (variant + 0.5) / 4.0;
++        f0r_set_param_value(instance, &direction, 1);
++        f0r_update2(instance, 0.0, first, second, NULL, output);
++        for (int i = 0; i < pixels; ++i) {
++            background += output[i] == 0xff101010u;
++            first_pixels += (output[i] & 0xffu) > 0x20u;
++            second_pixels += ((output[i] >> 8) & 0xffu) > 0x20u;
++        }
++        if (!background || !first_pixels || !second_pixels) {
++            fprintf(stderr, "articulated-panels: direction variant %d failed\n", variant);
++            f0r_destruct(instance);
++            return 13 + variant;
++        }
+     }
+     f0r_destruct(instance);
+ 
+-    if (!background || !first_pixels || !second_pixels)
+-        return 13;
+-    puts("articulated-panels: horizontal endpoints and vertical midpoint passed");
++    puts("articulated-panels: endpoints and all horizontal/vertical directions passed");
+     return 0;
+ }
+-- 
+2.51.1
