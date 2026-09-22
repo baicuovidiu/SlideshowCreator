@@ -89,7 +89,7 @@ jobs:
             -lm -o panels-test.exe
           ./panels-test.exe
 
-      - name: Build Transition Lab foundation
+      - name: Fetch pinned build sources
         shell: msys2 {0}
         run: |
           cd shotcut-fork
@@ -97,6 +97,33 @@ jobs:
           printf 'SHOTCUT_VERSION="%s"\n' "$SHOTCUT_VERSION_NUMERIC" >> build-shotcut.conf
           printf 'SHOTCUT_HEAD=0\n' >> build-shotcut.conf
           printf 'SHOTCUT_REVISION=%s\n' "$SHOTCUT_COMMIT" >> build-shotcut.conf
+          printf 'ACTION_GET=1\n' >> build-shotcut.conf
+          printf 'ACTION_CONFIGURE=0\n' >> build-shotcut.conf
+          printf 'ACTION_COMPILE_INSTALL=0\n' >> build-shotcut.conf
+          bash scripts/build-shotcut-msys2.sh
+
+      - name: Patch the exact Shotcut source that will be compiled
+        shell: msys2 {0}
+        run: |
+          cd shotcut-fork
+          git diff --binary "$SHOTCUT_COMMIT" > transition-lab-combined.patch
+          test -s transition-lab-combined.patch
+          cd build/src/shotcut
+          git apply --check ../../../transition-lab-combined.patch
+          git apply ../../../transition-lab-combined.patch
+          test -f src/docks/transitionlabdock.cpp
+          test -f src/transitionlab/frei0r/panels.c
+          grep -q 'add_library(transitionlab_panels' src/CMakeLists.txt
+          grep -q 'Transition Lab' src/docks/transitionlabdock.cpp
+          git diff --check
+
+      - name: Build the verified Transition Lab source
+        shell: msys2 {0}
+        run: |
+          cd shotcut-fork
+          printf 'ACTION_GET=0\n' >> build-shotcut.conf
+          printf 'ACTION_CONFIGURE=1\n' >> build-shotcut.conf
+          printf 'ACTION_COMPILE_INSTALL=1\n' >> build-shotcut.conf
           bash scripts/build-shotcut-msys2.sh
 
       - name: Verify and package foundation
