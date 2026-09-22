@@ -141,7 +141,9 @@ jobs:
           & $ffmpeg -loglevel error -y -f concat -safe 0 -i $list -f lavfi -i 'sine=frequency=440:sample_rate=48000:duration=12' -vf 'scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,fps=30,format=yuv420p' -map 0:v -map 1:a -c:v libx264 -preset ultrafast -c:a aac -b:a 256k -shortest $out
           $sw.Stop()
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path $out)) { throw 'FAIL: 120-photo benchmark export failed' }
-          "SOFTWARE_BENCHMARK_120_PHOTOS_SECONDS=$([math]::Round($sw.Elapsed.TotalSeconds,2))" | Tee-Object -FilePath '.\artifacts\benchmark120.txt'
+          $seconds=[math]::Round($sw.Elapsed.TotalSeconds,2)
+          "SOFTWARE_BENCHMARK_120_PHOTOS_SECONDS=$seconds" | Tee-Object -FilePath '.\artifacts\benchmark120.txt'
+          Write-Host "::notice title=120-photo software benchmark::$seconds seconds"
 
       - name: Guard CARUSEL against destructive source crop
         shell: pwsh
@@ -149,6 +151,14 @@ jobs:
           $src=Get-Content '.\src\SlideshowCreator\MainWindow.xaml.cs' -Raw
           if ($src -match '\[a\{segment\}\]crop=' -or $src -match '\[b\{segment\}\]crop=') { throw 'FAIL: destructive per-photo crop reintroduced into CARUSEL' }
           if (-not ($src -match 'force_original_aspect_ratio=decrease')) { throw 'FAIL: CARUSEL full-photo CONTAIN rule missing' }
+
+      - name: Upload 120-photo benchmark result
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-120-photos
+          path: artifacts/benchmark120.txt
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Upload runnable salvage application
         uses: actions/upload-artifact@v4
