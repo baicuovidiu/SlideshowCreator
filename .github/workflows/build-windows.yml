@@ -143,6 +143,13 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path $out)) { throw 'FAIL: 120-photo benchmark export failed' }
           "SOFTWARE_BENCHMARK_120_PHOTOS_SECONDS=$([math]::Round($sw.Elapsed.TotalSeconds,2))" | Tee-Object -FilePath '.\artifacts\benchmark120.txt'
 
+      - name: Guard CARUSEL against destructive source crop
+        shell: pwsh
+        run: |
+          $src=Get-Content '.\src\SlideshowCreator\MainWindow.xaml.cs' -Raw
+          if ($src -match '\[a\{segment\}\]crop=' -or $src -match '\[b\{segment\}\]crop=') { throw 'FAIL: destructive per-photo crop reintroduced into CARUSEL' }
+          if (-not ($src -match 'force_original_aspect_ratio=decrease')) { throw 'FAIL: CARUSEL full-photo CONTAIN rule missing' }
+
       - name: Upload runnable salvage application
         uses: actions/upload-artifact@v4
         with:
