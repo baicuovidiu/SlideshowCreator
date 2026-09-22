@@ -107,7 +107,7 @@ jobs:
         shell: msys2 {0}
         run: |
           cd shotcut-fork
-          git diff --binary "$SHOTCUT_COMMIT" > transition-lab-combined.patch
+          git diff --binary "$SHOTCUT_COMMIT" | sed 's/\r$//' > transition-lab-combined.patch
           test -s transition-lab-combined.patch
           cd build/src/shotcut
           git apply --check ../../../transition-lab-combined.patch
