@@ -18,6 +18,7 @@ jobs:
     timeout-minutes: 180
     env:
       SHOTCUT_COMMIT: ce58962c93a283fdabc9a7617ee2a3e802f9759b
+      SHOTCUT_VERSION_NUMERIC: 26.9.22
     steps:
       - name: Checkout Transition Lab branch
         uses: actions/checkout@v6
@@ -105,7 +106,7 @@ jobs:
         run: |
           cd shotcut-upstream
           printf 'INSTALL_DIR="%s/build"\n' "$(pwd)" > build-shotcut.conf
-          printf 'SHOTCUT_VERSION="baseline-%s"\n' "$SHOTCUT_COMMIT" >> build-shotcut.conf
+          printf 'SHOTCUT_VERSION="%s"\n' "$SHOTCUT_VERSION_NUMERIC" >> build-shotcut.conf
           printf 'SHOTCUT_HEAD=0\n' >> build-shotcut.conf
           printf 'SHOTCUT_REVISION=%s\n' "$SHOTCUT_COMMIT" >> build-shotcut.conf
           bash scripts/build-shotcut-msys2.sh
