@@ -1,0 +1,25 @@
+From b72dae0b8f32b50d7115bb9070449155f187cef8 Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Tue, 22 Sep 2026 15:13:54 -0400
+Subject: [PATCH] fix: enable C for transition plugin
+
+---
+ CMakeLists.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 8a5d737..a346849 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -14,7 +14,7 @@ project(shotcut
+   VERSION ${SHOTCUT_VERSION}
+   DESCRIPTION "cross-platform (Qt), open-source (GPLv3) video editor"
+   HOMEPAGE_URL "https://www.shotcut.org"
+-  LANGUAGES CXX
++  LANGUAGES C CXX
+ )
+ 
+ if(WIN32)
+-- 
+2.51.1
+
