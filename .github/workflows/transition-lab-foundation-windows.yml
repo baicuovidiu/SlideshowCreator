@@ -1,0 +1,104 @@
+name: Transition Lab - Foundation Windows
+
+on:
+  push:
+    branches:
+      - transition-lab-0.1.0
+    paths:
+      - '.github/workflows/transition-lab-foundation-windows.yml'
+      - 'patches/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  foundation-windows:
+    runs-on: windows-latest
+    timeout-minutes: 180
+    env:
+      SHOTCUT_COMMIT: ce58962c93a283fdabc9a7617ee2a3e802f9759b
+      SHOTCUT_VERSION_NUMERIC: 0.1.0
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Checkout pinned Shotcut and apply Transition Lab patches
+        shell: pwsh
+        run: |
+          git clone https://github.com/mltframework/shotcut.git shotcut-fork
+          Set-Location shotcut-fork
+          git checkout $env:SHOTCUT_COMMIT
+          git submodule update --init --recursive
+          git apply --check ..\patches\0001-feat-add-Transition-Lab-foundation-panel.patch
+          git apply ..\patches\0001-feat-add-Transition-Lab-foundation-panel.patch
+          git diff --check
+
+      - name: Setup MSYS2 MINGW64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            autotools base-devel bzip2 coreutils git gzip tar xz zip
+            perl-List-MoreUtils perl-XML-Parser
+            mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-meson mingw-w64-x86_64-nasm
+            mingw-w64-x86_64-ninja mingw-w64-x86_64-yasm
+            mingw-w64-x86_64-cairo mingw-w64-x86_64-eigen3
+            mingw-w64-x86_64-dlfcn mingw-w64-x86_64-fftw
+            mingw-w64-x86_64-gcc-fortran mingw-w64-x86_64-gettext-tools
+            mingw-w64-x86_64-harfbuzz mingw-w64-x86_64-lame
+            mingw-w64-x86_64-libarchive mingw-w64-x86_64-libepoxy
+            mingw-w64-x86_64-libexif mingw-w64-x86_64-libimagequant
+            mingw-w64-x86_64-libsamplerate mingw-w64-x86_64-libtheora
+            mingw-w64-x86_64-libvorbis mingw-w64-x86_64-libvpx
+            mingw-w64-x86_64-libwebp mingw-w64-x86_64-libxml2
+            mingw-w64-x86_64-lilv mingw-w64-x86_64-onevpl
+            mingw-w64-x86_64-openblas mingw-w64-x86_64-openssl
+            mingw-w64-x86_64-opus mingw-w64-x86_64-potrace
+            mingw-w64-x86_64-python-pip mingw-w64-x86_64-qt6-base
+            mingw-w64-x86_64-qt6-charts mingw-w64-x86_64-qt6-declarative
+            mingw-w64-x86_64-qt6-imageformats mingw-w64-x86_64-qt6-multimedia
+            mingw-w64-x86_64-qt6-multimedia-wmf mingw-w64-x86_64-qt6-svg
+            mingw-w64-x86_64-qt6-tools mingw-w64-x86_64-qt6-translations
+            mingw-w64-x86_64-qt6-websockets mingw-w64-x86_64-rubberband
+            mingw-w64-x86_64-sox mingw-w64-x86_64-svt-av1
+            mingw-w64-x86_64-vid.stab mingw-w64-x86_64-vulkan-headers
+            mingw-w64-x86_64-vulkan-loader mingw-w64-x86_64-x264
+            mingw-w64-x86_64-x265 mingw-w64-x86_64-zimg
+
+      - name: Install Shotcut prebuilt dependencies
+        shell: msys2 {0}
+        run: |
+          pacman --noconfirm -Rdd mingw-w64-x86_64-aom
+          cd "$HOME"
+          curl -fL --retry 3 --no-progress-meter -o mlt-prebuilt-mingw64-v7.txz https://s3.amazonaws.com/misc.meltymedia/shotcut-build/mlt-prebuilt-mingw64-v7.txz
+          tar -xJf mlt-prebuilt-mingw64-v7.txz
+          rm mlt-prebuilt-mingw64-v7.txz
+
+      - name: Build Transition Lab foundation
+        shell: msys2 {0}
+        run: |
+          cd shotcut-fork
+          printf 'INSTALL_DIR="%s/build"\n' "$(pwd)" > build-shotcut.conf
+          printf 'SHOTCUT_VERSION="%s"\n' "$SHOTCUT_VERSION_NUMERIC" >> build-shotcut.conf
+          printf 'SHOTCUT_HEAD=0\n' >> build-shotcut.conf
+          printf 'SHOTCUT_REVISION=%s\n' "$SHOTCUT_COMMIT" >> build-shotcut.conf
+          bash scripts/build-shotcut-msys2.sh
+
+      - name: Verify and package foundation
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path shotcut-fork\build -Recurse -Filter shotcut.exe | Select-Object -First 1
+          if (-not $exe) { throw "Transition Lab executable was not produced" }
+          Get-FileHash $exe.FullName -Algorithm SHA256 | Format-List | Out-File transition-lab-foundation-smoke.txt
+          Compress-Archive -Path shotcut-fork\build\Shotcut -DestinationPath transition-lab-foundation-windows-x64.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: transition-lab-foundation-windows-x64
+          path: |
+            transition-lab-foundation-windows-x64.zip
+            transition-lab-foundation-smoke.txt
+          if-no-files-found: error
+          retention-days: 30
