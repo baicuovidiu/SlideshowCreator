@@ -94,6 +94,7 @@ jobs:
         run: |
           cd shotcut-fork
           printf 'INSTALL_DIR="%s/build"\n' "$(pwd)" > build-shotcut.conf
+          printf 'SOURCE_DIR="%s/build/src"\n' "$(pwd)" >> build-shotcut.conf
           printf 'SHOTCUT_VERSION="%s"\n' "$SHOTCUT_VERSION_NUMERIC" >> build-shotcut.conf
           printf 'SHOTCUT_HEAD=0\n' >> build-shotcut.conf
           printf 'SHOTCUT_REVISION=%s\n' "$SHOTCUT_COMMIT" >> build-shotcut.conf
