@@ -1,0 +1,29 @@
+From 69bff35b6caaaacf7deb5d2b342da0672e2b6076 Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Tue, 22 Sep 2026 14:55:56 +0200
+Subject: [PATCH] fix: package panels plugin in all Windows modes
+
+---
+ src/CMakeLists.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 09acebe..3c107f7 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -364,11 +364,11 @@ if(WIN32)
+ 
+   if(WINDOWS_DEPLOY)
+     install(TARGETS shotcut RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX})
+-    install(TARGETS transitionlab_panels RUNTIME DESTINATION lib/frei0r-1)
+   else()
+     target_compile_definitions(shotcut PRIVATE NODEPLOY)
+     install(TARGETS shotcut RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+   endif()
++  install(TARGETS transitionlab_panels RUNTIME DESTINATION lib/frei0r-1)
+ 
+   install(DIRECTORY qml DESTINATION ${CMAKE_INSTALL_PREFIX}/share/shotcut/)
+   install(DIRECTORY ${CMAKE_SOURCE_DIR}/filter-sets DESTINATION ${CMAKE_INSTALL_PREFIX}/share/shotcut/)
+-- 
+2.51.1
+
