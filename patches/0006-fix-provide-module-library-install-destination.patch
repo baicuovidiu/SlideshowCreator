@@ -1,0 +1,27 @@
+From e9df74050c4794ddebec21a47e2faa0554384bf4 Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Tue, 22 Sep 2026 20:51:53 +0300
+Subject: [PATCH] fix: provide module library install destination
+
+---
+ src/CMakeLists.txt | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 067f5cb..f031eb8 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -370,7 +370,9 @@ if(WIN32)
+     target_compile_definitions(shotcut PRIVATE NODEPLOY)
+     install(TARGETS shotcut RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+   endif()
+-  install(TARGETS transitionlab_panels RUNTIME DESTINATION lib/frei0r-1)
++  install(TARGETS transitionlab_panels
++    RUNTIME DESTINATION lib/frei0r-1
++    LIBRARY DESTINATION lib/frei0r-1)
+ 
+   install(DIRECTORY qml DESTINATION ${CMAKE_INSTALL_PREFIX}/share/shotcut/)
+   install(DIRECTORY ${CMAKE_SOURCE_DIR}/filter-sets DESTINATION ${CMAKE_INSTALL_PREFIX}/share/shotcut/)
+-- 
+2.51.1
+
