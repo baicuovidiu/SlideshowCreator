@@ -1,0 +1,218 @@
+From 121b352858e83fccf3f14dd14f4f6cb8b8870c50 Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Tue, 22 Sep 2026 02:55:08 -0700
+Subject: [PATCH] feat: store transition settings per photo pair
+
+---
+ src/docks/transitionlabdock.cpp | 98 +++++++++++++++++++++++++++++----
+ src/docks/transitionlabdock.h   | 13 +++++
+ 2 files changed, 99 insertions(+), 12 deletions(-)
+
+diff --git a/src/docks/transitionlabdock.cpp b/src/docks/transitionlabdock.cpp
+index 3f1e443..704215c 100644
+--- a/src/docks/transitionlabdock.cpp
++++ b/src/docks/transitionlabdock.cpp
+@@ -20,6 +20,8 @@
+ #include <QLabel>
+ #include <QListWidget>
+ #include <QPushButton>
++#include <QImageReader>
++#include <QSlider>
+ #include <QSysInfo>
+ #include <QThread>
+ #include <QVBoxLayout>
+@@ -60,8 +62,10 @@ TransitionLabDock::TransitionLabDock(QWidget *parent)
+ 
+     auto *transitionBox = new QGroupBox(tr("Transition between photos"), container);
+     auto *transitionLayout = new QFormLayout(transitionBox);
+-    auto *transition = new QComboBox(transitionBox);
+-    transition->addItems({tr("Articulated panels"),
++    m_transitionTargetLabel = new QLabel(tr("Select a photo to edit the transition after it."), transitionBox);
++    m_transitionTargetLabel->setWordWrap(true);
++    m_transitionFamily = new QComboBox(transitionBox);
++    m_transitionFamily->addItems({tr("Articulated panels"),
+                           tr("3D accordion"),
+                           tr("Rotating cubes"),
+                           tr("Rectangular mosaic"),
+@@ -76,17 +80,18 @@ TransitionLabDock::TransitionLabDock(QWidget *parent)
+                           tr("Floating frames"),
+                           tr("Frame fan"),
+                           tr("Depth blocks")});
+-    auto *duration = new QDoubleSpinBox(transitionBox);
+-    duration->setRange(0.20, 10.0);
+-    duration->setValue(1.50);
+-    duration->setSuffix(tr(" s"));
+-    duration->setSingleStep(0.10);
+-    auto *direction = new QComboBox(transitionBox);
+-    direction->addItems({tr("Automatic"), tr("Left to right"), tr("Right to left"),
++    m_transitionDuration = new QDoubleSpinBox(transitionBox);
++    m_transitionDuration->setRange(0.20, 10.0);
++    m_transitionDuration->setValue(1.50);
++    m_transitionDuration->setSuffix(tr(" s"));
++    m_transitionDuration->setSingleStep(0.10);
++    m_transitionDirection = new QComboBox(transitionBox);
++    m_transitionDirection->addItems({tr("Automatic"), tr("Left to right"), tr("Right to left"),
+                          tr("Top to bottom"), tr("Bottom to top")});
+-    transitionLayout->addRow(tr("Family"), transition);
+-    transitionLayout->addRow(tr("Duration"), duration);
+-    transitionLayout->addRow(tr("Direction"), direction);
++    transitionLayout->addRow(m_transitionTargetLabel);
++    transitionLayout->addRow(tr("Family"), m_transitionFamily);
++    transitionLayout->addRow(tr("Duration"), m_transitionDuration);
++    transitionLayout->addRow(tr("Direction"), m_transitionDirection);
+     layout->addWidget(transitionBox);
+ 
+     auto *audioBox = new QGroupBox(tr("Music"), container);
+@@ -95,6 +100,9 @@ TransitionLabDock::TransitionLabDock(QWidget *parent)
+     m_audioLabel->setWordWrap(true);
+     m_fadeIn = new QDoubleSpinBox(audioBox);
+     m_fadeOut = new QDoubleSpinBox(audioBox);
++    m_volume = new QSlider(Qt::Horizontal, audioBox);
++    m_volume->setRange(0, 100);
++    m_volume->setValue(100);
+     for (auto *spinBox : {m_fadeIn, m_fadeOut}) {
+         spinBox->setRange(0.0, 30.0);
+         spinBox->setValue(2.0);
+@@ -102,6 +110,7 @@ TransitionLabDock::TransitionLabDock(QWidget *parent)
+         spinBox->setSingleStep(0.25);
+     }
+     audioLayout->addRow(tr("File"), m_audioLabel);
++    audioLayout->addRow(tr("Volume"), m_volume);
+     audioLayout->addRow(tr("Fade In"), m_fadeIn);
+     audioLayout->addRow(tr("Fade Out"), m_fadeOut);
+     layout->addWidget(audioBox);
+@@ -121,6 +130,16 @@ TransitionLabDock::TransitionLabDock(QWidget *parent)
+     setWidget(container);
+     connect(photoButton, &QPushButton::clicked, this, [this] { importPhotos(); });
+     connect(audioButton, &QPushButton::clicked, this, [this] { importAudio(); });
++    connect(m_photoList, &QListWidget::currentRowChanged, this, [this](int row) {
++        if (m_editedRow >= 0)
++            storeTransitionForRow(m_editedRow);
++        loadTransitionForRow(row);
++    });
++    connect(m_transitionFamily, &QComboBox::currentIndexChanged, this, [this] { storeTransitionForRow(m_editedRow); });
++    connect(m_transitionDuration, &QDoubleSpinBox::valueChanged, this, [this] { storeTransitionForRow(m_editedRow); });
++    connect(m_transitionDirection, &QComboBox::currentIndexChanged, this, [this] { storeTransitionForRow(m_editedRow); });
++    connect(m_photoList->model(), &QAbstractItemModel::rowsMoved, this, [this] { loadTransitionForRow(m_photoList->currentRow()); });
++    updateTransitionEditor();
+     refreshDiagnostics();
+ }
+ 
+@@ -142,16 +161,71 @@ double TransitionLabDock::fadeOutSeconds() const
+     return m_fadeOut->value();
+ }
+ 
++int TransitionLabDock::volumePercent() const
++{
++    return m_volume->value();
++}
++
+ void TransitionLabDock::importPhotos()
+ {
+     const QStringList files = QFileDialog::getOpenFileNames(
+         this, tr("Import photos"), QString(), tr("Photos (*.jpg *.jpeg *.png)"));
+     for (const QString &file : files) {
++        QImageReader reader(file);
++        if (!reader.canRead())
++            continue;
+         auto *item = new QListWidgetItem(QIcon(file), QFileInfo(file).fileName());
+         item->setData(Qt::UserRole, file);
++        item->setData(Qt::UserRole + 1, 0);
++        item->setData(Qt::UserRole + 2, 1.5);
++        item->setData(Qt::UserRole + 3, 0);
+         item->setToolTip(file);
+         m_photoList->addItem(item);
+     }
++    if (m_photoList->currentRow() < 0 && m_photoList->count())
++        m_photoList->setCurrentRow(0);
++    updateTransitionEditor();
++}
++
++void TransitionLabDock::loadTransitionForRow(int row)
++{
++    m_editedRow = row;
++    m_loadingTransition = true;
++    if (row >= 0 && row < m_photoList->count()) {
++        const QListWidgetItem *item = m_photoList->item(row);
++        m_transitionFamily->setCurrentIndex(item->data(Qt::UserRole + 1).toInt());
++        m_transitionDuration->setValue(item->data(Qt::UserRole + 2).toDouble());
++        m_transitionDirection->setCurrentIndex(item->data(Qt::UserRole + 3).toInt());
++    }
++    m_loadingTransition = false;
++    updateTransitionEditor();
++}
++
++void TransitionLabDock::storeTransitionForRow(int row)
++{
++    if (m_loadingTransition || row < 0 || row >= m_photoList->count() - 1)
++        return;
++    QListWidgetItem *item = m_photoList->item(row);
++    item->setData(Qt::UserRole + 1, m_transitionFamily->currentIndex());
++    item->setData(Qt::UserRole + 2, m_transitionDuration->value());
++    item->setData(Qt::UserRole + 3, m_transitionDirection->currentIndex());
++}
++
++void TransitionLabDock::updateTransitionEditor()
++{
++    const int row = m_photoList->currentRow();
++    const bool hasFollowingPhoto = row >= 0 && row < m_photoList->count() - 1;
++    m_transitionFamily->setEnabled(hasFollowingPhoto);
++    m_transitionDuration->setEnabled(hasFollowingPhoto);
++    m_transitionDirection->setEnabled(hasFollowingPhoto);
++    if (hasFollowingPhoto) {
++        m_transitionTargetLabel->setText(
++            tr("%1  →  %2").arg(m_photoList->item(row)->text(), m_photoList->item(row + 1)->text()));
++    } else if (row >= 0) {
++        m_transitionTargetLabel->setText(tr("The last photo has no following transition."));
++    } else {
++        m_transitionTargetLabel->setText(tr("Select a photo to edit the transition after it."));
++    }
+ }
+ 
+ void TransitionLabDock::importAudio()
+diff --git a/src/docks/transitionlabdock.h b/src/docks/transitionlabdock.h
+index 58ff87b..b0edf68 100644
+--- a/src/docks/transitionlabdock.h
++++ b/src/docks/transitionlabdock.h
+@@ -16,6 +16,8 @@
+ class QLabel;
+ class QListWidget;
+ class QDoubleSpinBox;
++class QComboBox;
++class QSlider;
+ 
+ class TransitionLabDock : public QDockWidget
+ {
+@@ -26,18 +28,29 @@ public:
+     QString audioFile() const { return m_audioFile; }
+     double fadeInSeconds() const;
+     double fadeOutSeconds() const;
++    int volumePercent() const;
+ 
+ private:
+     void importPhotos();
+     void importAudio();
+     void refreshDiagnostics();
++    void loadTransitionForRow(int row);
++    void storeTransitionForRow(int row);
++    void updateTransitionEditor();
+ 
+     QListWidget *m_photoList{nullptr};
+     QLabel *m_audioLabel{nullptr};
+     QLabel *m_diagnosticsLabel{nullptr};
+     QDoubleSpinBox *m_fadeIn{nullptr};
+     QDoubleSpinBox *m_fadeOut{nullptr};
++    QDoubleSpinBox *m_transitionDuration{nullptr};
++    QComboBox *m_transitionFamily{nullptr};
++    QComboBox *m_transitionDirection{nullptr};
++    QSlider *m_volume{nullptr};
++    QLabel *m_transitionTargetLabel{nullptr};
+     QString m_audioFile;
++    int m_editedRow{-1};
++    bool m_loadingTransition{false};
+ };
+ 
+ #endif
+-- 
+2.51.1
+

@@ -29,8 +29,12 @@ jobs:
           Set-Location shotcut-fork
           git checkout $env:SHOTCUT_COMMIT
           git submodule update --init --recursive
-          git apply --check ..\patches\0001-feat-add-Transition-Lab-foundation-panel.patch
-          git apply ..\patches\0001-feat-add-Transition-Lab-foundation-panel.patch
+          Get-ChildItem ..\patches\*.patch | Sort-Object Name | ForEach-Object {
+            git apply --check $_.FullName
+            if ($LASTEXITCODE -ne 0) { throw "Patch validation failed: $($_.Name)" }
+            git apply $_.FullName
+            if ($LASTEXITCODE -ne 0) { throw "Patch application failed: $($_.Name)" }
+          }
           git diff --check
 
       - name: Setup MSYS2 MINGW64
