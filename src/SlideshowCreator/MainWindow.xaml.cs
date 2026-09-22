@@ -223,9 +223,18 @@ public partial class MainWindow : Window
 
     void ExportPhotosCarousel(string dest, string dir, string videoEncoder)
     {
-        // First useful CARUSEL: pairs of complete photos, alternating 60/40 and 40/60.
-        // No crop: each source is scaled with force_original_aspect_ratio=decrease and padded inside its plane.
-        var inputs = new StringBuilder(); var filters = new StringBuilder(); var segments = new StringBuilder();
+        var inputs = new StringBuilder();
+        for (int i = 0; i < Media.Count; i++) inputs.Append($" -loop 1 -t {F(Media[i].Duration)} -i \"{Media[i].Path}\"");
+        var filters = BuildCarouselFilterGraph(Media);
+        var script = Path.Combine(dir, "carousel-filter.txt"); File.WriteAllText(script, filters, new UTF8Encoding(false));
+        var musicIndex = Media.Count; var audioInput = music == null ? "" : $" -stream_loop -1 -i \"{music}\""; var audioMap = music == null ? " -an" : $" -map {musicIndex}:a -c:a aac -b:a 256k -shortest";
+        Ffmpeg($"-y{inputs}{audioInput} -filter_complex_script \"{script}\" -map \"[outv]\"{audioMap} {videoEncoder} -movflags +faststart \"{dest}\"");
+    }
+
+    string BuildCarouselFilterGraph(IReadOnlyList<MediaItem> media)
+    {
+        // Exact graph builder used by the product export path. CI can validate this method separately.
+        var filters = new StringBuilder(); var segments = new StringBuilder();
         for (int i = 0; i < Media.Count; i++) inputs.Append($" -loop 1 -t {F(Media[i].Duration)} -i \"{Media[i].Path}\"");
         int segment = 0;
         for (int i = 0; i < Media.Count; )
@@ -297,9 +306,7 @@ public partial class MainWindow : Window
         var totalDuration = CalculateCarouselDurationWithTransitions();
         var fadeOutStart = Math.Max(0, totalDuration - 0.45);
         filters.Append($"[carouselbase]pad=1940:1100:10:10:black,crop=1920:1080:x='10+8*sin(t*1.1)':y='10+8*cos(t*0.9)',fade=t=in:st=0:d=0.35,fade=t=out:st={F(fadeOutStart)}:d=0.45[outv]");
-        var script = Path.Combine(dir, "carousel-filter.txt"); File.WriteAllText(script, filters.ToString(), new UTF8Encoding(false));
-        var musicIndex = Media.Count; var audioInput = music == null ? "" : $" -stream_loop -1 -i \"{music}\""; var audioMap = music == null ? " -an" : $" -map {musicIndex}:a -c:a aac -b:a 256k -shortest";
-        Ffmpeg($"-y{inputs}{audioInput} -filter_complex_script \"{script}\" -map \"[outv]\"{audioMap} {videoEncoder} -movflags +faststart \"{dest}\"");
+        return filters.ToString();
     }
 
     void ExportPhotosSinglePass(string dest, string dir, string videoEncoder)
