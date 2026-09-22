@@ -1,0 +1,25 @@
+From f342c2b3684305c868856552e38efbf2344895fa Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Tue, 22 Sep 2026 16:36:13 +0200
+Subject: [PATCH] fix: build panels plugin with Shotcut target
+
+---
+ src/CMakeLists.txt | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 3c107f7..067f5cb 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -252,6 +252,8 @@ add_executable(shotcut WIN32 MACOSX_BUNDLE
+   ../icons/resources.qrc
+ )
+ 
++add_dependencies(shotcut transitionlab_panels)
++
+ add_custom_target(OTHER_FILES
+   SOURCES
+   ../.github/ISSUE_TEMPLATE.md
+-- 
+2.51.1
+
