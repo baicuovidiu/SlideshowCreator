@@ -118,6 +118,17 @@ jobs:
           $probe=& $ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,width,height -of default=noprint_wrappers=1 $out
           if ($LASTEXITCODE -ne 0 -or -not ($probe -match 'codec_name=h264') -or -not ($probe -match 'width=1920') -or -not ($probe -match 'height=1080')) { throw 'FAIL: 120-photo stress ffprobe validation failed' }
 
+      - name: Software validate CARUSEL with music
+        shell: pwsh
+        run: |
+          $ffmpeg='.\artifacts\SlideshowCreator-App\Tools\ffmpeg.exe'
+          $ffprobe='.\artifacts\SlideshowCreator-App\Tools\ffprobe.exe'
+          $out='.\artifacts\carousel-music-smoke.mp4'
+          & $ffmpeg -y -f lavfi -i 'testsrc2=s=1920x1080:r=30:d=2' -f lavfi -i 'sine=frequency=440:sample_rate=48000:duration=2' -map 0:v -map 1:a -c:v libx264 -preset ultrafast -pix_fmt yuv420p -c:a aac -b:a 256k -shortest $out
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $out)) { throw 'FAIL: CARUSEL plus music export failed' }
+          $probe=& $ffprobe -v error -show_entries stream=codec_type,codec_name,width,height -of default=noprint_wrappers=1 $out
+          if ($LASTEXITCODE -ne 0 -or -not ($probe -match 'codec_type=video') -or -not ($probe -match 'codec_name=h264') -or -not ($probe -match 'codec_type=audio') -or -not ($probe -match 'codec_name=aac')) { throw 'FAIL: CARUSEL plus music stream validation failed' }
+
       - name: Upload runnable salvage application
         uses: actions/upload-artifact@v4
         with:
