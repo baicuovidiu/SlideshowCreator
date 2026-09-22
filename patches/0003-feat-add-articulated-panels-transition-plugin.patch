@@ -1,0 +1,315 @@
+From 82d3a8e59ad4081b8cb6511d42b246b61be51afb Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Tue, 22 Sep 2026 14:12:46 +0200
+Subject: [PATCH] feat: add articulated panels transition plugin
+
+---
+ src/CMakeLists.txt                     |   5 +
+ src/transitionlab/frei0r/frei0r.h      |  37 +++++++
+ src/transitionlab/frei0r/panels.c      | 148 +++++++++++++++++++++++++
+ src/transitionlab/frei0r/panels_test.c |  72 ++++++++++++
+ 4 files changed, 262 insertions(+)
+ create mode 100644 src/transitionlab/frei0r/frei0r.h
+ create mode 100644 src/transitionlab/frei0r/panels.c
+ create mode 100644 src/transitionlab/frei0r/panels_test.c
+
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 279ec5d..09acebe 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -1,5 +1,9 @@
+ find_package(Qt6 REQUIRED COMPONENTS Core)
+ 
++add_library(transitionlab_panels MODULE transitionlab/frei0r/panels.c)
++target_include_directories(transitionlab_panels PRIVATE transitionlab/frei0r)
++set_target_properties(transitionlab_panels PROPERTIES PREFIX "")
++
+ add_executable(shotcut WIN32 MACOSX_BUNDLE
+   abstractproducerwidget.cpp abstractproducerwidget.h
+   actions.cpp actions.h
+@@ -360,6 +364,7 @@ if(WIN32)
+ 
+   if(WINDOWS_DEPLOY)
+     install(TARGETS shotcut RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX})
++    install(TARGETS transitionlab_panels RUNTIME DESTINATION lib/frei0r-1)
+   else()
+     target_compile_definitions(shotcut PRIVATE NODEPLOY)
+     install(TARGETS shotcut RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+diff --git a/src/transitionlab/frei0r/frei0r.h b/src/transitionlab/frei0r/frei0r.h
+new file mode 100644
+index 0000000..521fce0
+--- /dev/null
++++ b/src/transitionlab/frei0r/frei0r.h
+@@ -0,0 +1,37 @@
++#ifndef TRANSITIONLAB_FREI0R_H
++#define TRANSITIONLAB_FREI0R_H
++
++#include <stdint.h>
++
++#ifdef _WIN32
++#define F0R_EXPORT __declspec(dllexport)
++#else
++#define F0R_EXPORT
++#endif
++
++typedef void *f0r_instance_t;
++typedef void *f0r_param_t;
++
++enum { F0R_PLUGIN_TYPE_FILTER, F0R_PLUGIN_TYPE_SOURCE, F0R_PLUGIN_TYPE_MIXER2, F0R_PLUGIN_TYPE_MIXER3 };
++enum { F0R_COLOR_MODEL_BGRA8888, F0R_COLOR_MODEL_RGBA8888, F0R_COLOR_MODEL_PACKED32 };
++enum { F0R_PARAM_BOOL, F0R_PARAM_DOUBLE, F0R_PARAM_COLOR, F0R_PARAM_POSITION, F0R_PARAM_STRING };
++
++typedef struct {
++    const char *name;
++    const char *author;
++    int plugin_type;
++    int color_model;
++    int frei0r_version;
++    int major_version;
++    int minor_version;
++    int num_params;
++    const char *explanation;
++} f0r_plugin_info_t;
++
++typedef struct {
++    const char *name;
++    int type;
++    const char *explanation;
++} f0r_param_info_t;
++
++#endif
+diff --git a/src/transitionlab/frei0r/panels.c b/src/transitionlab/frei0r/panels.c
+new file mode 100644
+index 0000000..3726cf7
+--- /dev/null
++++ b/src/transitionlab/frei0r/panels.c
+@@ -0,0 +1,148 @@
++#include "frei0r.h"
++
++#include <math.h>
++#include <stddef.h>
++#include <stdlib.h>
++
++typedef struct {
++    unsigned width;
++    unsigned height;
++    double progress;
++    double direction;
++    double panel_count;
++} panels_instance;
++
++static double clamp01(double value)
++{
++    return value < 0.0 ? 0.0 : (value > 1.0 ? 1.0 : value);
++}
++
++F0R_EXPORT int f0r_init(void) { return 1; }
++F0R_EXPORT void f0r_deinit(void) {}
++
++F0R_EXPORT void f0r_get_plugin_info(f0r_plugin_info_t *info)
++{
++    info->name = "Transition Lab: Articulated Panels";
++    info->author = "Transition Lab contributors";
++    info->plugin_type = F0R_PLUGIN_TYPE_MIXER2;
++    info->color_model = F0R_COLOR_MODEL_RGBA8888;
++    info->frei0r_version = 1;
++    info->major_version = 0;
++    info->minor_version = 1;
++    info->num_params = 3;
++    info->explanation = "Perspective panel transition with horizontal and vertical variants.";
++}
++
++F0R_EXPORT void f0r_get_param_info(f0r_param_info_t *info, int index)
++{
++    static const char *names[] = {"Progress", "Direction", "Panels"};
++    static const char *help[] = {
++        "Transition progress from the first to the second image.",
++        "Horizontal, reverse horizontal, vertical, or reverse vertical.",
++        "Panel count mapped from 4 to 16."
++    };
++    if (index < 0 || index > 2)
++        return;
++    info->name = names[index];
++    info->type = F0R_PARAM_DOUBLE;
++    info->explanation = help[index];
++}
++
++F0R_EXPORT f0r_instance_t f0r_construct(unsigned width, unsigned height)
++{
++    panels_instance *instance = (panels_instance *) calloc(1, sizeof(*instance));
++    if (!instance)
++        return NULL;
++    instance->width = width;
++    instance->height = height;
++    instance->panel_count = 0.34;
++    return instance;
++}
++
++F0R_EXPORT void f0r_destruct(f0r_instance_t instance) { free(instance); }
++
++F0R_EXPORT void f0r_set_param_value(f0r_instance_t opaque, f0r_param_t param, int index)
++{
++    panels_instance *instance = (panels_instance *) opaque;
++    const double value = *((double *) param);
++    if (index == 0)
++        instance->progress = value;
++    else if (index == 1)
++        instance->direction = value;
++    else if (index == 2)
++        instance->panel_count = value;
++}
++
++F0R_EXPORT void f0r_get_param_value(f0r_instance_t opaque, f0r_param_t param, int index)
++{
++    const panels_instance *instance = (const panels_instance *) opaque;
++    double *value = (double *) param;
++    *value = index == 0 ? instance->progress : (index == 1 ? instance->direction : instance->panel_count);
++}
++
++static uint32_t shade(uint32_t pixel, double light)
++{
++    unsigned char *channel = (unsigned char *) &pixel;
++    channel[0] = (unsigned char) (channel[0] * light);
++    channel[1] = (unsigned char) (channel[1] * light);
++    channel[2] = (unsigned char) (channel[2] * light);
++    return pixel;
++}
++
++F0R_EXPORT void f0r_update2(f0r_instance_t opaque,
++                            double time,
++                            const uint32_t *first,
++                            const uint32_t *second,
++                            const uint32_t *unused,
++                            uint32_t *output)
++{
++    panels_instance *instance = (panels_instance *) opaque;
++    const unsigned width = instance->width;
++    const unsigned height = instance->height;
++    const int direction = (int) (clamp01(instance->direction) * 3.999);
++    const int vertical = direction >= 2;
++    const int reverse = direction == 1 || direction == 3;
++    const int panels = 4 + (int) (clamp01(instance->panel_count) * 12.999);
++    const unsigned axis_size = vertical ? height : width;
++    const unsigned cross_size = vertical ? width : height;
++    const double progress = clamp01(instance->progress);
++    const double stagger = 0.22;
++    (void) time;
++    (void) unused;
++
++    if (!first || !second || !output || !axis_size || !cross_size)
++        return;
++
++    for (unsigned cross = 0; cross < cross_size; ++cross) {
++        for (unsigned axis = 0; axis < axis_size; ++axis) {
++            const int raw_panel = (int) (((uint64_t) axis * panels) / axis_size);
++            const int panel = reverse ? panels - 1 - raw_panel : raw_panel;
++            const double delay = panels > 1 ? stagger * panel / (panels - 1.0) : 0.0;
++            const double local = clamp01((progress - delay) / (1.0 - stagger));
++            const double folded = fabs(1.0 - 2.0 * local);
++            const double visible = 0.035 + 0.965 * folded;
++            const unsigned panel_start = (unsigned) (((uint64_t) raw_panel * axis_size) / panels);
++            const unsigned panel_end = (unsigned) (((uint64_t) (raw_panel + 1) * axis_size) / panels);
++            const double center = (panel_start + panel_end - 1) * 0.5;
++            const double distance = axis - center;
++            const double source_distance = distance / visible;
++            const double source_axis_value = center + source_distance;
++            const unsigned out_x = vertical ? cross : axis;
++            const unsigned out_y = vertical ? axis : cross;
++            const size_t out_index = (size_t) out_y * width + out_x;
++
++            if (fabs(source_distance) > (panel_end - panel_start) * 0.5
++                || source_axis_value < panel_start || source_axis_value >= panel_end) {
++                output[out_index] = 0xff101010u;
++                continue;
++            }
++
++            const unsigned source_axis = (unsigned) source_axis_value;
++            const unsigned source_x = vertical ? cross : source_axis;
++            const unsigned source_y = vertical ? source_axis : cross;
++            const size_t source_index = (size_t) source_y * width + source_x;
++            const double light = 0.52 + 0.48 * visible;
++            output[out_index] = shade(local < 0.5 ? first[source_index] : second[source_index], light);
++        }
++    }
++}
+diff --git a/src/transitionlab/frei0r/panels_test.c b/src/transitionlab/frei0r/panels_test.c
+new file mode 100644
+index 0000000..a36a829
+--- /dev/null
++++ b/src/transitionlab/frei0r/panels_test.c
+@@ -0,0 +1,72 @@
++#include "frei0r.h"
++
++#include <stdint.h>
++#include <stdio.h>
++
++f0r_instance_t f0r_construct(unsigned width, unsigned height);
++void f0r_destruct(f0r_instance_t instance);
++void f0r_set_param_value(f0r_instance_t instance, f0r_param_t param, int index);
++void f0r_update2(f0r_instance_t instance,
++                 double time,
++                 const uint32_t *first,
++                 const uint32_t *second,
++                 const uint32_t *unused,
++                 uint32_t *output);
++
++static int all_equal(const uint32_t *frame, uint32_t value, int count)
++{
++    for (int i = 0; i < count; ++i) {
++        if (frame[i] != value)
++            return 0;
++    }
++    return 1;
++}
++
++int main(void)
++{
++    enum { width = 32, height = 24, pixels = width * height };
++    uint32_t first[pixels];
++    uint32_t second[pixels];
++    uint32_t output[pixels];
++    f0r_instance_t instance = f0r_construct(width, height);
++    double progress = 0.0;
++    double direction = 0.0;
++    int background = 0;
++    int first_pixels = 0;
++    int second_pixels = 0;
++
++    if (!instance)
++        return 10;
++    for (int i = 0; i < pixels; ++i) {
++        first[i] = 0xff0000ffu;
++        second[i] = 0xff00ff00u;
++    }
++
++    f0r_set_param_value(instance, &progress, 0);
++    f0r_update2(instance, 0.0, first, second, NULL, output);
++    if (!all_equal(output, first[0], pixels))
++        return 11;
++
++    progress = 1.0;
++    f0r_set_param_value(instance, &progress, 0);
++    f0r_update2(instance, 0.0, first, second, NULL, output);
++    if (!all_equal(output, second[0], pixels))
++        return 12;
++
++    progress = 0.5;
++    direction = 0.8;
++    f0r_set_param_value(instance, &progress, 0);
++    f0r_set_param_value(instance, &direction, 1);
++    f0r_update2(instance, 0.0, first, second, NULL, output);
++    for (int i = 0; i < pixels; ++i) {
++        background += output[i] == 0xff101010u;
++        first_pixels += (output[i] & 0xffu) > 0x20u;
++        second_pixels += ((output[i] >> 8) & 0xffu) > 0x20u;
++    }
++    f0r_destruct(instance);
++
++    if (!background || !first_pixels || !second_pixels)
++        return 13;
++    puts("articulated-panels: horizontal endpoints and vertical midpoint passed");
++    return 0;
++}
+-- 
+2.51.1
+

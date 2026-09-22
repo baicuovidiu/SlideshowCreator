@@ -80,6 +80,15 @@ jobs:
           tar -xJf mlt-prebuilt-mingw64-v7.txz
           rm mlt-prebuilt-mingw64-v7.txz
 
+      - name: Test articulated panels geometry
+        shell: msys2 {0}
+        run: |
+          gcc -std=c11 -Wall -Wextra -Werror \
+            shotcut-fork/src/transitionlab/frei0r/panels.c \
+            shotcut-fork/src/transitionlab/frei0r/panels_test.c \
+            -lm -o panels-test.exe
+          ./panels-test.exe
+
       - name: Build Transition Lab foundation
         shell: msys2 {0}
         run: |
@@ -95,7 +104,10 @@ jobs:
         run: |
           $exe = Get-ChildItem -Path shotcut-fork\build -Recurse -Filter shotcut.exe | Select-Object -First 1
           if (-not $exe) { throw "Transition Lab executable was not produced" }
+          $plugin = Get-ChildItem -Path shotcut-fork\build -Recurse -Filter transitionlab_panels.dll | Select-Object -First 1
+          if (-not $plugin) { throw "Articulated panels plugin was not produced" }
           Get-FileHash $exe.FullName -Algorithm SHA256 | Format-List | Out-File transition-lab-foundation-smoke.txt
+          Get-FileHash $plugin.FullName -Algorithm SHA256 | Format-List | Out-File transition-lab-panels-smoke.txt
           Compress-Archive -Path shotcut-fork\build\Shotcut -DestinationPath transition-lab-foundation-windows-x64.zip -Force
 
       - uses: actions/upload-artifact@v4
@@ -104,5 +116,6 @@ jobs:
           path: |
             transition-lab-foundation-windows-x64.zip
             transition-lab-foundation-smoke.txt
+            transition-lab-panels-smoke.txt
           if-no-files-found: error
           retention-days: 30
