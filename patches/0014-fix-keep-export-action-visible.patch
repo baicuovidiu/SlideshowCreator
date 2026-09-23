@@ -4,14 +4,14 @@ Date: Wed, 23 Sep 2026 20:10:00 +0000
 Subject: [PATCH] fix: keep preview and export actions visible
 
 ---
- src/docks/transitionlabdock.cpp | 17 +++++++++--------
- 1 file changed, 9 insertions(+), 8 deletions(-)
+ src/docks/transitionlabdock.cpp | 19 ++++++++++---------
+ 1 file changed, 10 insertions(+), 9 deletions(-)
 
 diff --git a/src/docks/transitionlabdock.cpp b/src/docks/transitionlabdock.cpp
 index 967cd6d..af3411c 100644
 --- a/src/docks/transitionlabdock.cpp
 +++ b/src/docks/transitionlabdock.cpp
-@@ -123,6 +123,15 @@ TransitionLabDock::TransitionLabDock(QWidget *parent)
+@@ -123,6 +123,16 @@ TransitionLabDock::TransitionLabDock(QWidget *parent)
      audioLayout->addRow(tr("Fade Out"), m_fadeOut);
      layout->addWidget(audioBox);
  
@@ -28,7 +28,7 @@ index 967cd6d..af3411c 100644
      auto *diagnosticsBox = new QGroupBox(tr("Diagnostics"), container);
      auto *diagnosticsLayout = new QVBoxLayout(diagnosticsBox);
      m_diagnosticsLabel = new QLabel(diagnosticsBox);
-@@ -130,14 +139,6 @@ TransitionLabDock::TransitionLabDock(QWidget *parent)
+@@ -130,15 +140,6 @@ TransitionLabDock::TransitionLabDock(QWidget *parent)
      diagnosticsLayout->addWidget(m_diagnosticsLabel);
      layout->addWidget(diagnosticsBox);
  
