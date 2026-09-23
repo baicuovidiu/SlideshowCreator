@@ -11,7 +11,7 @@ diff --git a/src/docks/transitionlabdock.cpp b/src/docks/transitionlabdock.cpp
 index af3411c..f23571a 100644
 --- a/src/docks/transitionlabdock.cpp
 +++ b/src/docks/transitionlabdock.cpp
-@@ -278,6 +278,7 @@ Mlt::Playlist *TransitionLabDock::createSlideshow() const
+@@ -278,5 +278,6 @@ Mlt::Playlist *TransitionLabDock::createSlideshow() const
      const int framesPerPhoto = qRound(5.0 * MLT.profile().fps());
      auto *slideshow = new Mlt::Playlist(MLT.profile());
 +    slideshow->set(kExportFromProperty, 1);
