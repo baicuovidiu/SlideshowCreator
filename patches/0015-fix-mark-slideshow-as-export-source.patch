@@ -1,0 +1,22 @@
+From 1d6ce63c9d756c245d547a8eb85e08bbc7ee9e01 Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Wed, 23 Sep 2026 22:20:00 +0000
+Subject: [PATCH] fix: mark slideshow as the export source
+
+---
+ src/docks/transitionlabdock.cpp | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/docks/transitionlabdock.cpp b/src/docks/transitionlabdock.cpp
+index af3411c..f23571a 100644
+--- a/src/docks/transitionlabdock.cpp
++++ b/src/docks/transitionlabdock.cpp
+@@ -278,6 +278,7 @@ Mlt::Playlist *TransitionLabDock::createSlideshow() const
+     const int framesPerPhoto = qRound(5.0 * MLT.profile().fps());
+     auto *slideshow = new Mlt::Playlist(MLT.profile());
++    slideshow->set(kExportFromProperty, 1);
+     for (const QString &photo : photos) {
+         Mlt::Producer producer(MLT.profile(), photo.toUtf8().constData());
+         if (!producer.is_valid()) {
+-- 
+2.51.1
