@@ -153,31 +153,31 @@ jobs:
           $renderXml = Join-Path (Get-Location).Path "transition-lab-panels-render.mlt"
           $renderOutput = Join-Path (Get-Location).Path "transition-lab-panels-render.mp4"
           @'
-<mlt LC_NUMERIC="C" version="7.0.0" root=".">
-  <profile description="Transition Lab smoke test" width="640" height="360" progressive="1" sample_aspect_num="1" sample_aspect_den="1" display_aspect_num="16" display_aspect_den="9" frame_rate_num="25" frame_rate_den="1" colorspace="709"/>
-  <producer id="red" in="0" out="49">
-    <property name="mlt_service">color</property>
-    <property name="resource">#d02020</property>
-  </producer>
-  <producer id="blue" in="0" out="49">
-    <property name="mlt_service">color</property>
-    <property name="resource">#2050d0</property>
-  </producer>
-  <playlist id="track0"><entry producer="red" in="0" out="49"/></playlist>
-  <playlist id="track1"><entry producer="blue" in="0" out="49"/></playlist>
-  <tractor id="tractor0" in="0" out="49">
-    <multitrack><track producer="track0"/><track producer="track1"/></multitrack>
-    <transition id="panels" in="0" out="49">
-      <property name="a_track">0</property>
-      <property name="b_track">1</property>
-      <property name="mlt_service">frei0r.transitionlab_panels</property>
-      <property name="0">0=0;49=1</property>
-      <property name="1">0</property>
-      <property name="2">6</property>
-    </transition>
-  </tractor>
-</mlt>
-'@ | Set-Content -Path $renderXml -Encoding utf8
+          <mlt LC_NUMERIC="C" version="7.0.0" root=".">
+            <profile description="Transition Lab smoke test" width="640" height="360" progressive="1" sample_aspect_num="1" sample_aspect_den="1" display_aspect_num="16" display_aspect_den="9" frame_rate_num="25" frame_rate_den="1" colorspace="709"/>
+            <producer id="red" in="0" out="49">
+              <property name="mlt_service">color</property>
+              <property name="resource">#d02020</property>
+            </producer>
+            <producer id="blue" in="0" out="49">
+              <property name="mlt_service">color</property>
+              <property name="resource">#2050d0</property>
+            </producer>
+            <playlist id="track0"><entry producer="red" in="0" out="49"/></playlist>
+            <playlist id="track1"><entry producer="blue" in="0" out="49"/></playlist>
+            <tractor id="tractor0" in="0" out="49">
+              <multitrack><track producer="track0"/><track producer="track1"/></multitrack>
+              <transition id="panels" in="0" out="49">
+                <property name="a_track">0</property>
+                <property name="b_track">1</property>
+                <property name="mlt_service">frei0r.transitionlab_panels</property>
+                <property name="0">0=0;49=1</property>
+                <property name="1">0</property>
+                <property name="2">6</property>
+              </transition>
+            </tractor>
+          </mlt>
+          '@ | Set-Content -Path $renderXml -Encoding utf8
           Push-Location $exe.Directory.FullName
           try {
             & $melt.FullName $renderXml -consumer "avformat:$renderOutput" vcodec=libx264 an=1 pix_fmt=yuv420p crf=28
