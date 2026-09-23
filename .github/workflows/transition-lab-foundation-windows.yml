@@ -231,7 +231,16 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
           $installer = Get-Item "Transition-Lab-0.1.0-Windows-x64-Setup.exe"
           if ($installer.Length -lt 1048576) { throw "Installer output is unexpectedly small" }
-          Get-FileHash $installer.FullName -Algorithm SHA256 | Format-List | Out-File Transition-Lab-0.1.0-Windows-x64-Setup.sha256.txt
+          $installerHash = Get-FileHash $installer.FullName -Algorithm SHA256
+          $installerHash | Format-List | Tee-Object -FilePath Transition-Lab-0.1.0-Windows-x64-Setup.sha256.txt | Out-Host
+          $cleanInstall = Join-Path $env:RUNNER_TEMP "TransitionLabCleanInstall"
+          $install = Start-Process -FilePath $installer.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=$cleanInstall" -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Silent installer test failed with exit code $($install.ExitCode)" }
+          $installedExe = Join-Path $cleanInstall "shotcut.exe"
+          if (-not (Test-Path $installedExe)) { throw "Silent installer test did not install shotcut.exe" }
+          $installedPlugin = Get-ChildItem -Path $cleanInstall -Recurse -Filter transitionlab_panels.dll | Select-Object -First 1
+          if (-not $installedPlugin) { throw "Silent installer test did not install transitionlab_panels.dll" }
+          Write-Host "Clean Windows install smoke test passed: $installedExe"
 
       - uses: actions/upload-artifact@v4
         with:
