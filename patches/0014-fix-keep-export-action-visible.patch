@@ -1,0 +1,48 @@
+From 4f4dc72bafe75d2edc3e71cd8ac437331394f017 Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Wed, 23 Sep 2026 20:10:00 +0000
+Subject: [PATCH] fix: keep preview and export actions visible
+
+---
+ src/docks/transitionlabdock.cpp | 17 +++++++++--------
+ 1 file changed, 9 insertions(+), 8 deletions(-)
+
+diff --git a/src/docks/transitionlabdock.cpp b/src/docks/transitionlabdock.cpp
+index 967cd6d..af3411c 100644
+--- a/src/docks/transitionlabdock.cpp
++++ b/src/docks/transitionlabdock.cpp
+@@ -123,6 +123,15 @@ TransitionLabDock::TransitionLabDock(QWidget *parent)
+     audioLayout->addRow(tr("Fade Out"), m_fadeOut);
+     layout->addWidget(audioBox);
+ 
++    auto *actionRow = new QHBoxLayout;
++    m_previewButton = new QPushButton(tr("Preview slideshow"), container);
++    m_previewButton->setEnabled(false);
++    actionRow->addWidget(m_previewButton);
++    m_exportButton = new QPushButton(tr("Export MP4"), container);
++    m_exportButton->setEnabled(false);
++    m_exportButton->setToolTip(tr("Build the slideshow and choose the MP4 output file."));
++    actionRow->addWidget(m_exportButton);
++    layout->addLayout(actionRow);
++
+     auto *diagnosticsBox = new QGroupBox(tr("Diagnostics"), container);
+     auto *diagnosticsLayout = new QVBoxLayout(diagnosticsBox);
+     m_diagnosticsLabel = new QLabel(diagnosticsBox);
+@@ -130,14 +139,6 @@ TransitionLabDock::TransitionLabDock(QWidget *parent)
+     diagnosticsLayout->addWidget(m_diagnosticsLabel);
+     layout->addWidget(diagnosticsBox);
+ 
+-    m_previewButton = new QPushButton(tr("Preview slideshow"), container);
+-    m_previewButton->setEnabled(false);
+-    layout->addWidget(m_previewButton);
+-
+-    m_exportButton = new QPushButton(tr("Prepare MP4 export"), container);
+-    m_exportButton->setEnabled(false);
+-    m_exportButton->setToolTip(tr("Build the slideshow and open the verified Shotcut export panel."));
+-    layout->addWidget(m_exportButton);
+-
+     setWidget(container);
+     connect(photoButton, &QPushButton::clicked, this, [this] { importPhotos(); });
+     connect(audioButton, &QPushButton::clicked, this, [this] { importAudio(); });
+-- 
+2.51.1
