@@ -1,0 +1,71 @@
+From c5ea59db8a5b3ad5d1a677f15e5b4063b7ff4ab1 Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Wed, 23 Sep 2026 07:21:14 +0300
+Subject: [PATCH] feat: expose per-pair transition specifications
+
+---
+ src/docks/transitionlabdock.cpp | 16 ++++++++++++++++
+ src/docks/transitionlabdock.h   | 11 +++++++++++
+ 2 files changed, 27 insertions(+)
+
+diff --git a/src/docks/transitionlabdock.cpp b/src/docks/transitionlabdock.cpp
+index 704215c..31bf2bd 100644
+--- a/src/docks/transitionlabdock.cpp
++++ b/src/docks/transitionlabdock.cpp
+@@ -151,6 +151,22 @@ QStringList TransitionLabDock::photoFiles() const
+     return result;
+ }
+ 
++QList<TransitionLabDock::TransitionSpec> TransitionLabDock::transitionSpecs() const
++{
++    QList<TransitionSpec> result;
++    for (int row = 0; row + 1 < m_photoList->count(); ++row) {
++        const QListWidgetItem *item = m_photoList->item(row);
++        TransitionSpec spec;
++        spec.firstFile = item->data(Qt::UserRole).toString();
++        spec.secondFile = m_photoList->item(row + 1)->data(Qt::UserRole).toString();
++        spec.family = item->data(Qt::UserRole + 1).toInt();
++        spec.durationSeconds = item->data(Qt::UserRole + 2).toDouble();
++        spec.direction = item->data(Qt::UserRole + 3).toInt();
++        result.append(spec);
++    }
++    return result;
++}
++
+ double TransitionLabDock::fadeInSeconds() const
+ {
+     return m_fadeIn->value();
+diff --git a/src/docks/transitionlabdock.h b/src/docks/transitionlabdock.h
+index b0edf68..adbc5c9 100644
+--- a/src/docks/transitionlabdock.h
++++ b/src/docks/transitionlabdock.h
+@@ -11,6 +11,7 @@
+ #define TRANSITIONLABDOCK_H
+ 
+ #include <QDockWidget>
++#include <QList>
+ #include <QStringList>
+ 
+ class QLabel;
+@@ -22,9 +23,19 @@ class QSlider;
+ class TransitionLabDock : public QDockWidget
+ {
+ public:
++    struct TransitionSpec
++    {
++        QString firstFile;
++        QString secondFile;
++        int family{0};
++        double durationSeconds{1.5};
++        int direction{0};
++    };
++
+     explicit TransitionLabDock(QWidget *parent = nullptr);
+ 
+     QStringList photoFiles() const;
++    QList<TransitionSpec> transitionSpecs() const;
+     QString audioFile() const { return m_audioFile; }
+     double fadeInSeconds() const;
+     double fadeOutSeconds() const;
+-- 
+2.51.1
