@@ -144,7 +144,7 @@ jobs:
             $transitions = & $melt.FullName -query transitions 2>&1
             if ($LASTEXITCODE -ne 0) { throw "MLT transition query failed with exit code $LASTEXITCODE" }
             $transitions | Out-File $queryReport
-            if ($transitions -notmatch 'frei0r\.transitionlab_panels') {
+            if (($transitions -join "`n") -notmatch 'frei0r\.transitionlab_panels') {
               throw "MLT did not discover frei0r.transitionlab_panels"
             }
           } finally {
