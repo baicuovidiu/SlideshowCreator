@@ -1,0 +1,159 @@
+From 58d827b373d4d2950294ca4de19b84516b770e16 Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Wed, 23 Sep 2026 20:55:20 +0900
+Subject: [PATCH] feat: mix music with volume and fades
+
+---
+ src/docks/transitionlabdock.cpp | 51 ++++++++++++++++++++++++++++++---
+ src/docks/transitionlabdock.h   |  8 +++---
+ src/mainwindow.cpp              |  4 +--
+ 3 files changed, 53 insertions(+), 10 deletions(-)
+
+diff --git a/src/docks/transitionlabdock.cpp b/src/docks/transitionlabdock.cpp
+index 967cd6d..644785a 100644
+--- a/src/docks/transitionlabdock.cpp
++++ b/src/docks/transitionlabdock.cpp
+@@ -12,8 +12,10 @@
+ #include "mltcontroller.h"
+ #include "shotcut_mlt_properties.h"
+ 
++#include <MltFilter.h>
+ #include <MltPlaylist.h>
+ #include <MltProducer.h>
++#include <MltTractor.h>
+ #include <MltTransition.h>
+ 
+ #include <QComboBox>
+@@ -34,6 +36,8 @@
+ #include <QThread>
+ #include <QVBoxLayout>
+ 
++#include <cmath>
++
+ TransitionLabDock::TransitionLabDock(QWidget *parent)
+     : QDockWidget(tr("Transition Lab"), parent)
+ {
+@@ -260,7 +264,7 @@ void TransitionLabDock::updateTransitionEditor()
+     }
+ }
+ 
+-Mlt::Playlist *TransitionLabDock::createSlideshow() const
++Mlt::Producer *TransitionLabDock::createSlideshow() const
+ {
+     const QStringList photos = photoFiles();
+     if (photos.size() < 2)
+@@ -314,19 +318,58 @@ Mlt::Playlist *TransitionLabDock::createSlideshow() const
+ 
+         ++clipIndex;
+     }
+-    return slideshow;
++    if (m_audioFile.isEmpty())
++        return slideshow;
++
++    const int totalFrames = slideshow->get_length();
++    auto *audio = new Mlt::Producer(MLT.profile(), m_audioFile.toUtf8().constData());
++    if (!audio->is_valid()) {
++        delete audio;
++        delete slideshow;
++        return nullptr;
++    }
++    audio->set("video_index", -1);
++    audio->set_in_and_out(0, totalFrames - 1);
++
++    Mlt::Filter volume(MLT.profile(), "volume");
++    if (volume.is_valid()) {
++        const double gain = m_volume->value() > 0 ? 20.0 * std::log10(m_volume->value() / 100.0) : -60.0;
++        const int fadeInFrames = qMin(qRound(m_fadeIn->value() * MLT.profile().fps()), totalFrames - 1);
++        const int fadeOutFrames = qMin(qRound(m_fadeOut->value() * MLT.profile().fps()), totalFrames - 1);
++        volume.set_in_and_out(0, totalFrames - 1);
++        volume.anim_set("level", fadeInFrames > 0 ? -60.0 : gain, 0);
++        if (fadeInFrames > 0)
++            volume.anim_set("level", gain, fadeInFrames);
++        if (fadeOutFrames > 0) {
++            volume.anim_set("level", gain, qMax(0, totalFrames - fadeOutFrames - 1));
++            volume.anim_set("level", -60.0, totalFrames - 1);
++        }
++        audio->attach(volume);
++    }
++
++    auto *result = new Mlt::Tractor(MLT.profile());
++    result->set_track(*slideshow, 0);
++    result->set_track(*audio, 1);
++    Mlt::Transition mix(MLT.profile(), "mix");
++    if (mix.is_valid()) {
++        mix.set("always_active", 1);
++        result->plant_transition(mix, 0, 1);
++    }
++    delete audio;
++    delete slideshow;
++    return result;
+ }
+ 
+ void TransitionLabDock::previewSlideshow()
+ {
+-    Mlt::Playlist *slideshow = createSlideshow();
++    Mlt::Producer *slideshow = createSlideshow();
+     if (slideshow)
+         emit previewRequested(slideshow);
+ }
+ 
+ void TransitionLabDock::prepareExport()
+ {
+-    Mlt::Playlist *slideshow = createSlideshow();
++    Mlt::Producer *slideshow = createSlideshow();
+     if (slideshow)
+         emit exportRequested(slideshow);
+ }
+diff --git a/src/docks/transitionlabdock.h b/src/docks/transitionlabdock.h
+index dc478c8..4cf6783 100644
+--- a/src/docks/transitionlabdock.h
++++ b/src/docks/transitionlabdock.h
+@@ -21,7 +21,7 @@ class QComboBox;
+ class QSlider;
+ class QPushButton;
+ namespace Mlt {
+-class Playlist;
++class Producer;
+ }
+ 
+ class TransitionLabDock : public QDockWidget
+@@ -48,8 +48,8 @@ public:
+     int volumePercent() const;
+ 
+ signals:
+-    void previewRequested(Mlt::Playlist *slideshow);
+-    void exportRequested(Mlt::Playlist *slideshow);
++    void previewRequested(Mlt::Producer *slideshow);
++    void exportRequested(Mlt::Producer *slideshow);
+ 
+ private:
+     void importPhotos();
+@@ -58,7 +58,7 @@ private:
+     void loadTransitionForRow(int row);
+     void storeTransitionForRow(int row);
+     void updateTransitionEditor();
+-    Mlt::Playlist *createSlideshow() const;
++    Mlt::Producer *createSlideshow() const;
+     void previewSlideshow();
+     void prepareExport();
+ 
+diff --git a/src/mainwindow.cpp b/src/mainwindow.cpp
+index 5207c2f..1da9e40 100644
+--- a/src/mainwindow.cpp
++++ b/src/mainwindow.cpp
+@@ -278,11 +278,11 @@ void MainWindow::applyTransitionLabMode()
+     connect(m_transitionLabDock,
+             &TransitionLabDock::previewRequested,
+             this,
+-            [this](Mlt::Playlist *slideshow) { open(slideshow, false); });
++            [this](Mlt::Producer *slideshow) { open(slideshow, false); });
+     connect(m_transitionLabDock,
+             &TransitionLabDock::exportRequested,
+             this,
+-            [this](Mlt::Playlist *slideshow) {
++            [this](Mlt::Producer *slideshow) {
+                 open(slideshow, false);
+                 m_encodeDock->show();
+                 m_encodeDock->raise();
+-- 
+2.51.1
