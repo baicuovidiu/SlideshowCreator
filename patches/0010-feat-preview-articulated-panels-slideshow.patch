@@ -1,0 +1,200 @@
+From 27bce55cf17cb544a9aece272bfc71373ca15096 Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Wed, 23 Sep 2026 15:56:31 +0900
+Subject: [PATCH] feat: preview articulated panels slideshow
+
+---
+ src/docks/transitionlabdock.cpp | 78 +++++++++++++++++++++++++++++++++
+ src/docks/transitionlabdock.h   | 12 +++++
+ src/mainwindow.cpp              |  4 ++
+ 3 files changed, 94 insertions(+)
+
+diff --git a/src/docks/transitionlabdock.cpp b/src/docks/transitionlabdock.cpp
+index 31bf2bd..4372be4 100644
+--- a/src/docks/transitionlabdock.cpp
++++ b/src/docks/transitionlabdock.cpp
+@@ -9,6 +9,13 @@
+ 
+ #include "transitionlabdock.h"
+ 
++#include "mltcontroller.h"
++#include "shotcut_mlt_properties.h"
++
++#include <MltPlaylist.h>
++#include <MltProducer.h>
++#include <MltTransition.h>
++
+ #include <QComboBox>
+ #include <QDoubleSpinBox>
+ #include <QFileDialog>
+@@ -20,6 +27,7 @@
+ #include <QLabel>
+ #include <QListWidget>
+ #include <QPushButton>
++#include <QScopedPointer>
+ #include <QImageReader>
+ #include <QSlider>
+ #include <QSysInfo>
+@@ -122,6 +130,10 @@ TransitionLabDock::TransitionLabDock(QWidget *parent)
+     diagnosticsLayout->addWidget(m_diagnosticsLabel);
+     layout->addWidget(diagnosticsBox);
+ 
++    m_previewButton = new QPushButton(tr("Preview slideshow"), container);
++    m_previewButton->setEnabled(false);
++    layout->addWidget(m_previewButton);
++
+     auto *exportButton = new QPushButton(tr("Export MP4 Full HD"), container);
+     exportButton->setEnabled(false);
+     exportButton->setToolTip(tr("Enabled after the export pipeline validation succeeds."));
+@@ -130,6 +142,7 @@ TransitionLabDock::TransitionLabDock(QWidget *parent)
+     setWidget(container);
+     connect(photoButton, &QPushButton::clicked, this, [this] { importPhotos(); });
+     connect(audioButton, &QPushButton::clicked, this, [this] { importAudio(); });
++    connect(m_previewButton, &QPushButton::clicked, this, &TransitionLabDock::previewSlideshow);
+     connect(m_photoList, &QListWidget::currentRowChanged, this, [this](int row) {
+         if (m_editedRow >= 0)
+             storeTransitionForRow(m_editedRow);
+@@ -234,6 +247,7 @@ void TransitionLabDock::updateTransitionEditor()
+     m_transitionFamily->setEnabled(hasFollowingPhoto);
+     m_transitionDuration->setEnabled(hasFollowingPhoto);
+     m_transitionDirection->setEnabled(hasFollowingPhoto);
++    m_previewButton->setEnabled(m_photoList->count() >= 2);
+     if (hasFollowingPhoto) {
+         m_transitionTargetLabel->setText(
+             tr("%1  →  %2").arg(m_photoList->item(row)->text(), m_photoList->item(row + 1)->text()));
+@@ -244,6 +258,70 @@ void TransitionLabDock::updateTransitionEditor()
+     }
+ }
+ 
++Mlt::Playlist *TransitionLabDock::createSlideshow() const
++{
++    const QStringList photos = photoFiles();
++    if (photos.size() < 2)
++        return nullptr;
++
++    const int framesPerPhoto = qRound(5.0 * MLT.profile().fps());
++    auto *slideshow = new Mlt::Playlist(MLT.profile());
++    for (const QString &photo : photos) {
++        Mlt::Producer producer(MLT.profile(), photo.toUtf8().constData());
++        if (!producer.is_valid()) {
++            delete slideshow;
++            return nullptr;
++        }
++        producer.set("length", framesPerPhoto);
++        producer.set_in_and_out(0, framesPerPhoto - 1);
++        slideshow->append(producer, 0, framesPerPhoto - 1);
++    }
++
++    const QList<TransitionSpec> specs = transitionSpecs();
++    int clipIndex = 0;
++    for (int pair = 0; pair < specs.size(); ++pair, ++clipIndex) {
++        const TransitionSpec &spec = specs.at(pair);
++        if (spec.family != 0)
++            continue;
++
++        int transitionFrames = qRound(spec.durationSeconds * MLT.profile().fps());
++        transitionFrames = qMin(transitionFrames, framesPerPhoto / 2 - 1);
++        if (transitionFrames < 2)
++            continue;
++
++        slideshow->mix(clipIndex, transitionFrames);
++        QScopedPointer<Mlt::Producer> mixedClip(slideshow->get_clip(clipIndex + 1));
++        if (mixedClip.isNull())
++            break;
++        mixedClip->parent().set(kShotcutTransitionProperty, "transitionLabPanels");
++
++        Mlt::Transition audioMix(MLT.profile(), "mix:-2");
++        slideshow->mix_add(clipIndex + 1, &audioMix);
++
++        Mlt::Transition panels(MLT.profile(), "frei0r.transitionlab_panels");
++        if (!panels.is_valid()) {
++            delete slideshow;
++            return nullptr;
++        }
++        const int variant = spec.direction == 0 ? pair % 4 : spec.direction - 1;
++        panels.anim_set("0", 0.0, 0);
++        panels.anim_set("0", 1.0, transitionFrames - 1);
++        panels.set("1", (variant + 0.5) / 4.0);
++        panels.set("2", 0.34);
++        slideshow->mix_add(clipIndex + 1, &panels);
++
++        ++clipIndex;
++    }
++    return slideshow;
++}
++
++void TransitionLabDock::previewSlideshow()
++{
++    Mlt::Playlist *slideshow = createSlideshow();
++    if (slideshow)
++        emit previewRequested(slideshow);
++}
++
+ void TransitionLabDock::importAudio()
+ {
+     const QString file = QFileDialog::getOpenFileName(
+diff --git a/src/docks/transitionlabdock.h b/src/docks/transitionlabdock.h
+index adbc5c9..7bffca2 100644
+--- a/src/docks/transitionlabdock.h
++++ b/src/docks/transitionlabdock.h
+@@ -19,9 +19,15 @@ class QListWidget;
+ class QDoubleSpinBox;
+ class QComboBox;
+ class QSlider;
++class QPushButton;
++namespace Mlt {
++class Playlist;
++}
+ 
+ class TransitionLabDock : public QDockWidget
+ {
++    Q_OBJECT
++
+ public:
+     struct TransitionSpec
+     {
+@@ -41,6 +47,9 @@ public:
+     double fadeOutSeconds() const;
+     int volumePercent() const;
+ 
++signals:
++    void previewRequested(Mlt::Playlist *slideshow);
++
+ private:
+     void importPhotos();
+     void importAudio();
+@@ -48,6 +57,8 @@ private:
+     void loadTransitionForRow(int row);
+     void storeTransitionForRow(int row);
+     void updateTransitionEditor();
++    Mlt::Playlist *createSlideshow() const;
++    void previewSlideshow();
+ 
+     QListWidget *m_photoList{nullptr};
+     QLabel *m_audioLabel{nullptr};
+@@ -59,6 +70,7 @@ private:
+     QComboBox *m_transitionDirection{nullptr};
+     QSlider *m_volume{nullptr};
+     QLabel *m_transitionTargetLabel{nullptr};
++    QPushButton *m_previewButton{nullptr};
+     QString m_audioFile;
+     int m_editedRow{-1};
+     bool m_loadingTransition{false};
+diff --git a/src/mainwindow.cpp b/src/mainwindow.cpp
+index 3fb1eb0..fb69d0b 100644
+--- a/src/mainwindow.cpp
++++ b/src/mainwindow.cpp
+@@ -275,6 +275,10 @@ void MainWindow::applyTransitionLabMode()
+     m_transitionLabDock = new TransitionLabDock(this);
+     addDockWidget(Qt::LeftDockWidgetArea, m_transitionLabDock);
+     m_transitionLabDock->show();
++    connect(m_transitionLabDock,
++            &TransitionLabDock::previewRequested,
++            this,
++            [this](Mlt::Playlist *slideshow) { open(slideshow, false); });
+ 
+     const QList<QDockWidget *> hiddenDocks = {m_propertiesDock,
+                                               m_playlistDock,
+-- 
+2.51.1
+
