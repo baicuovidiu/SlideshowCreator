@@ -191,6 +191,47 @@ jobs:
           Get-FileHash $exe.FullName -Algorithm SHA256 | Format-List | Out-File transition-lab-foundation-smoke.txt
           Get-FileHash $plugin.FullName -Algorithm SHA256 | Format-List | Out-File transition-lab-panels-smoke.txt
           Compress-Archive -Path shotcut-fork\build\Shotcut -DestinationPath transition-lab-foundation-windows-x64.zip -Force
+          $appSource = (Resolve-Path "shotcut-fork\build\Shotcut").Path
+          $installerScript = Join-Path (Get-Location).Path "transition-lab-pilot.iss"
+          @"
+          [Setup]
+          AppId={{F254E53E-8BA3-4C85-92D9-3308D44C51E4}
+          AppName=Transition Lab
+          AppVersion=0.1.0
+          AppPublisher=Transition Lab contributors
+          DefaultDirName={autopf}\Transition Lab
+          DefaultGroupName=Transition Lab
+          ArchitecturesAllowed=x64compatible
+          ArchitecturesInstallIn64BitMode=x64compatible
+          OutputDir=$((Get-Location).Path)
+          OutputBaseFilename=Transition-Lab-0.1.0-Windows-x64-Setup
+          Compression=lzma2
+          SolidCompression=yes
+          WizardStyle=modern
+          UninstallDisplayIcon={app}\shotcut.exe
+          [Files]
+          Source: "$appSource\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+          [Icons]
+          Name: "{autoprograms}\Transition Lab"; Filename: "{app}\shotcut.exe"
+          Name: "{autodesktop}\Transition Lab"; Filename: "{app}\shotcut.exe"; Tasks: desktopicon
+          [Tasks]
+          Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"
+          [Run]
+          Filename: "{app}\shotcut.exe"; Description: "Launch Transition Lab"; Flags: nowait postinstall skipifsilent
+          "@ | Set-Content -Path $installerScript -Encoding utf8
+          $iscc = Get-ChildItem -Path "${env:ProgramFiles(x86)}\Inno Setup *\ISCC.exe" -ErrorAction SilentlyContinue |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $iscc) {
+            choco install innosetup --no-progress -y
+            $iscc = Get-ChildItem -Path "${env:ProgramFiles(x86)}\Inno Setup *\ISCC.exe" -ErrorAction SilentlyContinue |
+              Sort-Object FullName -Descending | Select-Object -First 1
+          }
+          if (-not $iscc) { throw "Inno Setup compiler was not found" }
+          & $iscc.FullName $installerScript
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+          $installer = Get-Item "Transition-Lab-0.1.0-Windows-x64-Setup.exe"
+          if ($installer.Length -lt 1048576) { throw "Installer output is unexpectedly small" }
+          Get-FileHash $installer.FullName -Algorithm SHA256 | Format-List | Out-File Transition-Lab-0.1.0-Windows-x64-Setup.sha256.txt
 
       - uses: actions/upload-artifact@v4
         with:
@@ -202,5 +243,7 @@ jobs:
             transition-lab-mlt-transitions.txt
             transition-lab-panels-render.mp4
             transition-lab-panels-render-smoke.txt
+            Transition-Lab-0.1.0-Windows-x64-Setup.exe
+            Transition-Lab-0.1.0-Windows-x64-Setup.sha256.txt
           if-no-files-found: error
           retention-days: 30
