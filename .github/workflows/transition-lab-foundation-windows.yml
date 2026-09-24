@@ -260,6 +260,124 @@ jobs:
           $installedPlugin = Get-ChildItem -Path $cleanInstall -Recurse -Filter transitionlab_panels.dll | Select-Object -First 1
           if (-not $installedPlugin) { throw "Silent installer test did not install transitionlab_panels.dll" }
           Write-Host "Clean Windows install smoke test passed: $installedExe"
+          $e2eDir = Join-Path $env:RUNNER_TEMP "TransitionLabExportE2E"
+          New-Item -ItemType Directory -Force -Path $e2eDir | Out-Null
+          Add-Type -AssemblyName System.Drawing
+          $photoFiles = @()
+          foreach ($entry in @(@("photo-red.png", [System.Drawing.Color]::Firebrick), @("photo-blue.png", [System.Drawing.Color]::RoyalBlue))) {
+            $path = Join-Path $e2eDir $entry[0]
+            $bitmap = New-Object System.Drawing.Bitmap 1920, 1080
+            $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+            $graphics.Clear($entry[1])
+            $graphics.Dispose()
+            $bitmap.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+            $bitmap.Dispose()
+            $photoFiles += $path
+          }
+          $uiExport = Join-Path $e2eDir "transition-lab-ui-export.mp4"
+          $env:TRANSITION_LAB_E2E_PHOTOS = $photoFiles -join ";"
+          $env:TRANSITION_LAB_E2E_OUTPUT = $uiExport
+          $env:APPDATA = Join-Path $e2eDir "AppData"
+          $env:LOCALAPPDATA = Join-Path $e2eDir "LocalAppData"
+          New-Item -ItemType Directory -Force -Path $env:APPDATA, $env:LOCALAPPDATA | Out-Null
+          $app = Start-Process -FilePath $installedExe -PassThru
+          $deadline = (Get-Date).AddMinutes(8)
+          $lastSize = -1
+          $stableChecks = 0
+          while ((Get-Date) -lt $deadline) {
+            Start-Sleep -Seconds 5
+            if (Test-Path $uiExport) {
+              $size = (Get-Item $uiExport).Length
+              if ($size -gt 1024 -and $size -eq $lastSize) {
+                $stableChecks++
+                if ($stableChecks -ge 3) { break }
+              } else {
+                $stableChecks = 0
+              }
+              $lastSize = $size
+            }
+          }
+          Get-Process shotcut -ErrorAction SilentlyContinue | Stop-Process -Force
+          if (-not (Test-Path $uiExport)) { throw "Installed application Export MP4 flow produced no file" }
+          if ((Get-Item $uiExport).Length -lt 1024) { throw "Installed application Export MP4 output is unexpectedly small" }
+          $uiProbe = & $ffprobePath -v error -select_streams v:0 -show_entries stream=codec_name,width,height,r_frame_rate -of default=noprint_wrappers=1 $uiExport 2>&1
+          if ($LASTEXITCODE -ne 0) { throw "ffprobe rejected the installed application export with exit code $LASTEXITCODE" }
+          $uiProbe | Out-File transition-lab-ui-export-probe.txt
+          $uiProbeText = $uiProbe -join "`n"
+          if ($uiProbeText -notmatch '(?m)^codec_name=h264
+      - uses: actions/upload-artifact@v4
+        with:
+          name: transition-lab-foundation-windows-x64
+          path: |
+            transition-lab-foundation-windows-x64.zip
+            transition-lab-foundation-smoke.txt
+            transition-lab-panels-smoke.txt
+            transition-lab-mlt-transitions.txt
+            transition-lab-panels-render.mp4
+            transition-lab-panels-render-smoke.txt
+            transition-lab-export-probe.txt
+            transition-lab-ui-export.mp4
+            transition-lab-ui-export-probe.txt
+            transition-lab-ui-export.sha256.txt
+            Transition-Lab-0.1.0-Windows-x64-Setup.exe
+            Transition-Lab-0.1.0-Windows-x64-Setup.sha256.txt
+          if-no-files-found: error
+          retention-days: 30
+) { throw "UI export is not H.264: $uiProbeText" }
+          if ($uiProbeText -notmatch '(?m)^width=1920
+      - uses: actions/upload-artifact@v4
+        with:
+          name: transition-lab-foundation-windows-x64
+          path: |
+            transition-lab-foundation-windows-x64.zip
+            transition-lab-foundation-smoke.txt
+            transition-lab-panels-smoke.txt
+            transition-lab-mlt-transitions.txt
+            transition-lab-panels-render.mp4
+            transition-lab-panels-render-smoke.txt
+            transition-lab-export-probe.txt
+            Transition-Lab-0.1.0-Windows-x64-Setup.exe
+            Transition-Lab-0.1.0-Windows-x64-Setup.sha256.txt
+          if-no-files-found: error
+          retention-days: 30
+) { throw "UI export is not 1920 pixels wide: $uiProbeText" }
+          if ($uiProbeText -notmatch '(?m)^height=1080
+      - uses: actions/upload-artifact@v4
+        with:
+          name: transition-lab-foundation-windows-x64
+          path: |
+            transition-lab-foundation-windows-x64.zip
+            transition-lab-foundation-smoke.txt
+            transition-lab-panels-smoke.txt
+            transition-lab-mlt-transitions.txt
+            transition-lab-panels-render.mp4
+            transition-lab-panels-render-smoke.txt
+            transition-lab-export-probe.txt
+            Transition-Lab-0.1.0-Windows-x64-Setup.exe
+            Transition-Lab-0.1.0-Windows-x64-Setup.sha256.txt
+          if-no-files-found: error
+          retention-days: 30
+) { throw "UI export is not 1080 pixels high: $uiProbeText" }
+          if ($uiProbeText -notmatch '(?m)^r_frame_rate=(25|30)/1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: transition-lab-foundation-windows-x64
+          path: |
+            transition-lab-foundation-windows-x64.zip
+            transition-lab-foundation-smoke.txt
+            transition-lab-panels-smoke.txt
+            transition-lab-mlt-transitions.txt
+            transition-lab-panels-render.mp4
+            transition-lab-panels-render-smoke.txt
+            transition-lab-export-probe.txt
+            Transition-Lab-0.1.0-Windows-x64-Setup.exe
+            Transition-Lab-0.1.0-Windows-x64-Setup.sha256.txt
+          if-no-files-found: error
+          retention-days: 30
+) { throw "UI export is not 25 or 30 fps: $uiProbeText" }
+          Copy-Item $uiExport transition-lab-ui-export.mp4
+          Get-FileHash $uiExport -Algorithm SHA256 | Format-List | Out-File transition-lab-ui-export.sha256.txt
+          Write-Host "Installed application Export MP4 end-to-end test passed"
 
       - uses: actions/upload-artifact@v4
         with:
