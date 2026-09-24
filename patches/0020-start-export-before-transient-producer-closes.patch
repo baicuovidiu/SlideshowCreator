@@ -1,0 +1,20 @@
+diff --git a/src/mainwindow.cpp b/src/mainwindow.cpp
+index fedcb1c5..b64c430f 100644
+--- a/src/mainwindow.cpp
++++ b/src/mainwindow.cpp
+@@ -303,9 +303,12 @@ void MainWindow::applyTransitionLabMode()
+                     fprintf(stderr, "TRANSITION_LAB_E2E: after source selection producer=%p\n", static_cast<void *>(MLT.producer()));
+                     fflush(stderr);
+                 }
+-                QTimer::singleShot(0, m_encodeDock, [this] {
+-                    QMetaObject::invokeMethod(m_encodeDock, "on_encodeButton_clicked");
+-                });
++                // Start encoding synchronously while the slideshow producer installed
++                // above is still owned by the controller. Queuing this call gives the
++                // player event loop an opportunity to close the transient producer.
++                QMetaObject::invokeMethod(m_encodeDock,
++                                          "on_encodeButton_clicked",
++                                          Qt::DirectConnection);
+             });
+ 
+     const QString exportTestPhotos = qEnvironmentVariable("TRANSITION_LAB_E2E_PHOTOS");
