@@ -280,7 +280,10 @@ jobs:
           $env:APPDATA = Join-Path $e2eDir "AppData"
           $env:LOCALAPPDATA = Join-Path $e2eDir "LocalAppData"
           New-Item -ItemType Directory -Force -Path $env:APPDATA, $env:LOCALAPPDATA | Out-Null
-          Start-Process -FilePath $installedExe | Out-Null
+          $env:SHOTCUT_WATCHDOG = "1"
+          $stdoutLog = Join-Path $e2eDir "shotcut-stdout.log"
+          $stderrLog = Join-Path $e2eDir "shotcut-stderr.log"
+          Start-Process -FilePath $installedExe -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog | Out-Null
           $deadline = (Get-Date).AddMinutes(8)
           $lastSize = -1
           $stableChecks = 0
@@ -298,7 +301,13 @@ jobs:
             }
           }
           Get-Process shotcut -ErrorAction SilentlyContinue | Stop-Process -Force
-          if (-not (Test-Path $uiExport)) { throw "Installed application Export MP4 flow produced no file" }
+          if (-not (Test-Path $uiExport)) {
+            if (Test-Path $stdoutLog) { Get-Content $stdoutLog | Out-Host }
+            if (Test-Path $stderrLog) { Get-Content $stderrLog | Out-Host }
+            Copy-Item $stdoutLog transition-lab-ui-stdout.log -ErrorAction SilentlyContinue
+            Copy-Item $stderrLog transition-lab-ui-stderr.log -ErrorAction SilentlyContinue
+            throw "Installed application Export MP4 flow produced no file"
+          }
           if ((Get-Item $uiExport).Length -lt 1024) { throw "Installed application Export MP4 output is unexpectedly small" }
           $uiProbe = & $ffprobePath -v error -select_streams v:0 -show_entries stream=codec_name,width,height,r_frame_rate -of default=noprint_wrappers=1 $uiExport 2>&1
           if ($LASTEXITCODE -ne 0) { throw "ffprobe rejected the installed application export with exit code $LASTEXITCODE" }
@@ -326,7 +335,10 @@ jobs:
             transition-lab-ui-export.mp4
             transition-lab-ui-export-probe.txt
             transition-lab-ui-export.sha256.txt
+            transition-lab-ui-stdout.log
+            transition-lab-ui-stderr.log
             Transition-Lab-0.1.0-Windows-x64-Setup.exe
             Transition-Lab-0.1.0-Windows-x64-Setup.sha256.txt
           if-no-files-found: error
           retention-days: 30
+          if: always()
