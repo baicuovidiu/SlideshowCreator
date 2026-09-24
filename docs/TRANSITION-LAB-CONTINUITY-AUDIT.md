@@ -134,3 +134,13 @@ Nu se livrează un alt installer drept „funcțional” până când sunt înde
 ## Următorul pas
 
 Installerul din buildul #29 este candidatul curent pentru test practic. Nu se adaugă alte tranziții înainte ca utilizatorul să confirme că, din interfața instalată, butonul Export MP4 creează fișierul slideshow. Dacă testul practic eșuează, se păstrează materialele și pașii exacți ai testului și se auditează traseul GUI fără a declara testul automat drept echivalent cu validarea utilizatorului.
+
+## Actualizare 24 septembrie 2026 — diagnostic export prin aplicația instalată
+
+- #30 și #31 au compilat și instalat; patchul 0016 marchează playlistul și tractorul final ca surse exportabile. Aceasta nu dovedește că butonul creează MP4.
+- #33 a eșuat înainte de job din cauza YAML corupt la inserarea testului; corectat în #34.
+- #34 și #35 au construit/instalat aplicația, dar testul din aplicația instalată nu a produs MP4 în opt minute. #35 a confirmat afișarea ferestrei Shotcut.
+- #36 a identificat exact punctul în care exportul devine inert: testul a încărcat două PNG, butonul Export MP4 a fost activ, `createSlideshow()` a returnat un pointer, semnalul `exportRequested` a fost emis; la intrarea în `EncodeDock::on_encodeButton_clicked()`, `MLT.producer()` era nul. Funcția revine imediat din prima condiție. Link: https://github.com/baicuovidiu/SlideshowCreator/actions/runs/35998007381 .
+- #37, commit `35249497d6aaf4ba3599e965e1cc80b8cc6cac58`, instrumentează validitatea și lungimea slideshow-ului înainte de `MainWindow::open()` și sursa MLT imediat după deschidere și după selecția sursei. Link: https://github.com/baicuovidiu/SlideshowCreator/actions/runs/36007054183 . Rezultatul încă nu este confirmat.
+
+Nu modificați `force_seekable` pe baza unei presupuneri: eroarea confirmată este un producător nul înainte de verificarea seekability. Distingeți un slideshow invalid la intrarea în `open()` de eliminarea lui în `open()` ori în callbackurile `producerOpened` folosind marcajele din #37. Exportul GUI rămâne NEFUNCȚIONAL în testul automat până la apariția unui MP4 verificat cu ffprobe. Testul actual rulează cu două PNG generate pe runner și cu calea fișierului transmisă prin variabilă de mediu; el nu automatizează alegerea fișierelor prin dialogurile Windows și nu înlocuiește proba cu fotografiile utilizatorului.
