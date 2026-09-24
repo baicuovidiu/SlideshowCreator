@@ -1,0 +1,87 @@
+diff --git a/src/docks/encodedock.cpp b/src/docks/encodedock.cpp
+index 2abbdf4b..48baa405 100644
+--- a/src/docks/encodedock.cpp
++++ b/src/docks/encodedock.cpp
+@@ -2097,12 +2097,15 @@ void EncodeDock::on_encodeButton_clicked()
+         } else if (!MAIN.fileName().isEmpty()) {
+             directory += "/" + projectBaseName;
+         }
+-        QString newName = QFileDialog::getSaveFileName(this,
+-                                                       caption,
+-                                                       directory,
+-                                                       nameFilter,
+-                                                       nullptr,
+-                                                       Util::getFileDialogOptions());
++        QString newName = qEnvironmentVariable("TRANSITION_LAB_E2E_OUTPUT");
++        if (newName.isEmpty()) {
++            newName = QFileDialog::getSaveFileName(this,
++                                                   caption,
++                                                   directory,
++                                                   nameFilter,
++                                                   nullptr,
++                                                   Util::getFileDialogOptions());
++        }
+         if (!newName.isEmpty() && !m_extension.isEmpty()) {
+             QFileInfo fi(newName);
+             if (fi.suffix().isEmpty()) {
+diff --git a/src/docks/transitionlabdock.cpp b/src/docks/transitionlabdock.cpp
+index da988493..ddacdc2d 100644
+--- a/src/docks/transitionlabdock.cpp
++++ b/src/docks/transitionlabdock.cpp
+@@ -201,6 +201,26 @@ int TransitionLabDock::volumePercent() const
+     return m_volume->value();
+ }
+ 
++void TransitionLabDock::runExportTest(const QStringList &files)
++{
++    for (const QString &file : files) {
++        QImageReader reader(file);
++        if (!reader.canRead())
++            continue;
++        auto *item = new QListWidgetItem(QIcon(file), QFileInfo(file).fileName());
++        item->setData(Qt::UserRole, file);
++        item->setData(Qt::UserRole + 1, 0);
++        item->setData(Qt::UserRole + 2, 1.5);
++        item->setData(Qt::UserRole + 3, 0);
++        m_photoList->addItem(item);
++    }
++    if (m_photoList->count() >= 2) {
++        m_photoList->setCurrentRow(0);
++        updateTransitionEditor();
++        m_exportButton->click();
++    }
++}
++
+ void TransitionLabDock::importPhotos()
+ {
+     const QStringList files = QFileDialog::getOpenFileNames(
+diff --git a/src/docks/transitionlabdock.h b/src/docks/transitionlabdock.h
+index 4cf6783a..bbe1d0ef 100644
+--- a/src/docks/transitionlabdock.h
++++ b/src/docks/transitionlabdock.h
+@@ -46,6 +46,7 @@ public:
+     double fadeInSeconds() const;
+     double fadeOutSeconds() const;
+     int volumePercent() const;
++    void runExportTest(const QStringList &files);
+ 
+ signals:
+     void previewRequested(Mlt::Producer *slideshow);
+diff --git a/src/mainwindow.cpp b/src/mainwindow.cpp
+index 91523cfd..35c8b4a9 100644
+--- a/src/mainwindow.cpp
++++ b/src/mainwindow.cpp
+@@ -292,6 +292,13 @@ void MainWindow::applyTransitionLabMode()
+                 });
+             });
+ 
++    const QString exportTestPhotos = qEnvironmentVariable("TRANSITION_LAB_E2E_PHOTOS");
++    if (!exportTestPhotos.isEmpty()) {
++        QTimer::singleShot(1000, m_transitionLabDock, [this, exportTestPhotos] {
++            m_transitionLabDock->runExportTest(exportTestPhotos.split(';', Qt::SkipEmptyParts));
++        });
++    }
++
+     const QList<QDockWidget *> hiddenDocks = {m_propertiesDock,
+                                               m_playlistDock,
+                                               m_filtersDock,
