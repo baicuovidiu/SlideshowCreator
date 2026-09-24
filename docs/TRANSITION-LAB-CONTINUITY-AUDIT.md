@@ -168,3 +168,8 @@ Acest build este primul pilot cu exportul confirmat prin traseul aplicației ins
 - Rularea https://github.com/baicuovidiu/SlideshowCreator/actions/runs/36039597095 a compilat și instalat aplicația, dar a eșuat în verificarea fade-urilor: început −75 dB, mijloc −28 dB, final −27,8 dB. Pista AAC există, Fade In este măsurabil; Fade Out nu este. Installerul #41 nu este validat pentru audio.
 - Ipoteza tehnică verificată prin citirea codului: WAV-ul de test are 12 secunde, iar slideshow-ul este mai scurt; tractorul audio/video nu avea limită proprie, deși filtrele și pista audio erau limitate la lungimea fotografiilor. Fixul #42 setează explicit punctul final al tractorului la ultimul cadru al slideshow-ului. Efectul rămâne neverificat până la testul Windows.
 - Nu livrați #41 ca versiune reparată; confirmați atenuarea la final numai după trecerea măsurătorilor din aplicația instalată.
+
+## Actualizare 24 septembrie 2026 — testul #42
+
+- #42 https://github.com/baicuovidiu/SlideshowCreator/actions/runs/36049627067: compilarea și instalarea au trecut, dar testul Fade Out a repetat rezultatul #41: început −75 dB, mijloc −28 dB, final −27,8 dB. Limitarea inițială a tractorului a fost insuficientă; nici acest installer nu este validat pentru fade.
+- Următoarea corecție fixează și lungimea pistei audio și reconfirmă lungimea tractorului după plantarea mixului; testul măsoară explicit durata MP4-ului și respinge exporturile mai lungi decât cele două fotografii. Se imprimă și lungimile producătorilor MLT la eșec. Acestea sunt ipoteze testate de următorul build, nu rezultate declarate.

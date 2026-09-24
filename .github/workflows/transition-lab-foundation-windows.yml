@@ -334,6 +334,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Unable to measure exported MP4 duration" }
           $duration = [double]::Parse(($durationText | Select-Object -First 1), [System.Globalization.CultureInfo]::InvariantCulture)
           if ($duration -lt 5) { throw "Export is too short for audio fade validation: $duration seconds" }
+          Write-Host "Installed export duration: $duration seconds (two photos, 12-second input music)"
+          if ($duration -gt 10.2) { throw "Export duration exceeds the two-photo slideshow: $duration seconds" }
           function Measure-MeanVolume([double] $start) {
             $offset = $start.ToString("F3", [System.Globalization.CultureInfo]::InvariantCulture)
             $report = & $ffmpegPath -hide_banner -nostats -i $uiExport -ss $offset -t 0.5 -map 0:a:0 -af volumedetect -f null NUL 2>&1
@@ -348,6 +350,7 @@ jobs:
           $endVolume = Measure-MeanVolume ($duration - 0.5)
           "start=$startVolume middle=$middleVolume end=$endVolume" | Tee-Object transition-lab-ui-audio-fades.txt | Out-Host
           if ($startVolume -gt $middleVolume - 5 -or $endVolume -gt $middleVolume - 5) {
+            if (Test-Path $stderrLog) { Get-Content $stderrLog | Select-String 'TRANSITION_LAB_E2E' | Out-Host }
             throw "Audio Fade In/Out was not measurable in exported MP4"
           }
           Write-Host "Installed application audio Fade In/Out passed"

@@ -1,0 +1,31 @@
+diff --git a/src/docks/transitionlabdock.cpp b/src/docks/transitionlabdock.cpp
+index f53f97b7..f373e1f1 100644
+--- a/src/docks/transitionlabdock.cpp
++++ b/src/docks/transitionlabdock.cpp
+@@ -372,6 +372,9 @@ Mlt::Producer *TransitionLabDock::createSlideshow() const
+         return nullptr;
+     }
+     audio->set("video_index", -1);
++    // The source song can be longer than the photos. MLT's multitrack derives
++    // its length from the longest track, including the producer's length.
++    audio->set("length", totalFrames);
+     audio->set_in_and_out(0, totalFrames - 1);
+ 
+     Mlt::Filter volume(MLT.profile(), "volume");
+@@ -403,6 +406,16 @@ Mlt::Producer *TransitionLabDock::createSlideshow() const
+         mix.set("always_active", 1);
+         result->plant_transition(mix, 0, 1);
+     }
++    result->set("length", totalFrames);
++    result->set_in_and_out(0, totalFrames - 1);
++    if (qEnvironmentVariableIsSet("TRANSITION_LAB_E2E_OUTPUT")) {
++        fprintf(stderr,
++                "TRANSITION_LAB_E2E: photo_frames=%d audio_frames=%d output_frames=%d\n",
++                totalFrames,
++                audio->get_playtime(),
++                result->get_playtime());
++        fflush(stderr);
++    }
+     delete audio;
+     delete slideshow;
+     return result;
