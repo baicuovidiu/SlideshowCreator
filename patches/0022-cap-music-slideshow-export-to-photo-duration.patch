@@ -1,0 +1,14 @@
+diff --git a/src/docks/transitionlabdock.cpp b/src/docks/transitionlabdock.cpp
+index 9a7b989a..f53f97b7 100644
+--- a/src/docks/transitionlabdock.cpp
++++ b/src/docks/transitionlabdock.cpp
+@@ -395,6 +395,9 @@ Mlt::Producer *TransitionLabDock::createSlideshow() const
+     result->set(kShotcutVirtualClip, 1);
+     result->set_track(*slideshow, 0);
+     result->set_track(*audio, 1);
++    // The soundtrack may outlast the photos. Bound the composed producer so
++    // export and the volume fade both end at the slideshow's final frame.
++    result->set_in_and_out(0, totalFrames - 1);
+     Mlt::Transition mix(MLT.profile(), "mix");
+     if (mix.is_valid()) {
+         mix.set("always_active", 1);

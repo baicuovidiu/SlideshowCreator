@@ -162,3 +162,9 @@ Acest build este primul pilot cu exportul confirmat prin traseul aplicației ins
 - #40, commit `a5e48d44a2c74861e422a2d06a575a10f0fdebde`, a trecut: aplicația instalată a exportat MP4 cu o pistă audio AAC verificată de ffprobe. Link: https://github.com/baicuovidiu/SlideshowCreator/actions/runs/36032790703 .
 - Installer #40 SHA-256 calculat de runner: `D533BBAEF7558E039B057FF0C6876A66F211DAF02F52823CAFBF4B45F67B5945`. Artefact: https://github.com/baicuovidiu/SlideshowCreator/actions/runs/36032790703/artifacts/10825646671 — 354.305.509 bytes, digest GitHub `sha256:3e9db9bb1544e0024bb41444406b2c99b2c13ae0d812f39f21c815e0ce614aa7`.
 - Conținutul audio este confirmat ca pistă AAC, dar intensitatea și fade-urile implicite de două secunde nu au fost măsurate de #40. Un test ulterior compară nivelul la început, mijloc și final. Testele folosesc un semnal sintetic; proba cu melodia utilizatorului rămâne necesară.
+
+## Actualizare 24 septembrie 2026 — Fade Out absent în buildul #41
+
+- Rularea https://github.com/baicuovidiu/SlideshowCreator/actions/runs/36039597095 a compilat și instalat aplicația, dar a eșuat în verificarea fade-urilor: început −75 dB, mijloc −28 dB, final −27,8 dB. Pista AAC există, Fade In este măsurabil; Fade Out nu este. Installerul #41 nu este validat pentru audio.
+- Ipoteza tehnică verificată prin citirea codului: WAV-ul de test are 12 secunde, iar slideshow-ul este mai scurt; tractorul audio/video nu avea limită proprie, deși filtrele și pista audio erau limitate la lungimea fotografiilor. Fixul #42 setează explicit punctul final al tractorului la ultimul cadru al slideshow-ului. Efectul rămâne neverificat până la testul Windows.
+- Nu livrați #41 ca versiune reparată; confirmați atenuarea la final numai după trecerea măsurătorilor din aplicația instalată.
