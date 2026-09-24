@@ -1,6 +1,6 @@
 # Transition Lab 0.1.0 — stare persistentă și audit
 
-Ultima actualizare: 2026-09-23  
+Ultima actualizare: 2026-09-24  
 Ramură: `transition-lab-0.1.0`  
 Depozit: `baicuovidiu/SlideshowCreator`
 
@@ -41,7 +41,7 @@ Patchurile sunt aplicate în ordine din directorul `patches/`.
 - 0012: muzică, volum și fade-in/fade-out.
 - 0013: încercare de pornire a exportului prin `EncodeDock::on_encodeButton_clicked`.
 - 0014: mutarea comenzilor Preview și Export MP4 într-o zonă vizibilă.
-- 0015: marchează slideshow-ul cu `kExportFromProperty`, astfel încât EncodeDock să aleagă slideshow-ul, nu timeline-ul gol. Acest patch este în curs de validare în buildul #27.
+- 0015: marchează slideshow-ul cu `kExportFromProperty`, astfel încât EncodeDock să aleagă slideshow-ul, nu timeline-ul gol. Patchul a fost compilat și validat automat în buildul #29; fluxul GUI instalat rămâne de confirmat practic.
 
 ## Greșeli confirmate și lecții obligatorii
 
@@ -101,7 +101,9 @@ Regulă: raportul trebuie să separe explicit:
 - #24: eșec înainte de compilare; patch 0014 corupt.
 - #25: succes; installer SHA-256 `5EB86C6D3962AAAC5E78404C63BBBCD1D27F4FE2C655F1553603A33AD0194B2B`; butonul a devenit vizibil, dar exportul nu a funcționat la utilizator.
 - #26: eșec înainte de compilare; patch 0015 corupt.
-- #27: rulează după corectarea structurii patchului 0015.
+- #27: succes după corectarea structurii patchului 0015.
+- #28: eșec înainte de compilare; definiția testului MP4 a fost coruptă de o înlocuire textuală care a interpretat secvența `$'` din expresiile regulate. Aplicația nu a fost compilată în acest build.
+- #29: succes integral; patchurile, geometria, compilarea, renderul MP4 H.264 1920×1080 la 25 fps, verificarea cu ffprobe, construirea installerului și instalarea curată au trecut. SHA-256 EXE: `512A521FEC32E2D96E45880FA084EB36FD6890B1BD9792EE64408C663060E2E7`. SHA-256 artefact ZIP: `81b7fc7238e7bf539fdf3c05b53d1ac983b6149757f605498d8ba6abbffb0cd3`.
 
 ## Stare funcțională adevărată
 
@@ -131,4 +133,4 @@ Nu se livrează un alt installer drept „funcțional” până când sunt înde
 
 ## Următorul pas
 
-Se verifică buildul #27. Dacă trece, nu se adaugă alte tranziții. Se întărește testul de export astfel încât să producă și să inspecteze un MP4 reprezentativ pentru slideshow. Abia apoi se livrează următorul installer pentru test practic.
+Installerul din buildul #29 este candidatul curent pentru test practic. Nu se adaugă alte tranziții înainte ca utilizatorul să confirme că, din interfața instalată, butonul Export MP4 creează fișierul slideshow. Dacă testul practic eșuează, se păstrează materialele și pașii exacți ai testului și se auditează traseul GUI fără a declara testul automat drept echivalent cu validarea utilizatorului.
