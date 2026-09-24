@@ -155,3 +155,10 @@ Nu modificați `force_seekable` pe baza unei presupuneri: eroarea confirmată es
 - Limitare a verificării: mediul de lucru nu poate descărca local arhiva de 354 MB (limită de transfer 32 MiB), deci integritatea ei locală nu a fost recalculată aici. Testul automat a verificat instalarea și codificarea; nu a făcut clic fizic pe buton și nu a folosit fotografiile utilizatorului. Audio, NVENC, restul tranzițiilor și compararea vizuală preview/export nu sunt validate de #38.
 
 Acest build este primul pilot cu exportul confirmat prin traseul aplicației instalate. Păstrați patchurile și testul instalat drept bază pentru extinderea ulterioară; nu declarați Etapa 1 completă înainte de verificarea tuturor cerințelor.
+
+## Actualizare 24 septembrie 2026 — muzica în exportul instalat
+
+- #39 a eșuat la parsarea workflow-ului înainte de pornirea jobului: înlocuirea de text pentru testul audio a interpretat secvența `$'` din regex drept sufixul șirului. Fișierul a fost reconstruit folosind o funcție de înlocuire literală și verificat cu parser YAML înainte de #40. Niciun installer #39 nu a fost produs.
+- #40, commit `a5e48d44a2c74861e422a2d06a575a10f0fdebde`, a trecut: aplicația instalată a exportat MP4 cu o pistă audio AAC verificată de ffprobe. Link: https://github.com/baicuovidiu/SlideshowCreator/actions/runs/36032790703 .
+- Installer #40 SHA-256 calculat de runner: `D533BBAEF7558E039B057FF0C6876A66F211DAF02F52823CAFBF4B45F67B5945`. Artefact: https://github.com/baicuovidiu/SlideshowCreator/actions/runs/36032790703/artifacts/10825646671 — 354.305.509 bytes, digest GitHub `sha256:3e9db9bb1544e0024bb41444406b2c99b2c13ae0d812f39f21c815e0ce614aa7`.
+- Conținutul audio este confirmat ca pistă AAC, dar intensitatea și fade-urile implicite de două secunde nu au fost măsurate de #40. Un test ulterior compară nivelul la început, mijloc și final. Testele folosesc un semnal sintetic; proba cu melodia utilizatorului rămâne necesară.

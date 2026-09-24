@@ -330,6 +330,27 @@ jobs:
             throw "Installed application export has no AAC music stream: $($audioProbe -join ', ')"
           }
           Write-Host "Installed application export includes AAC music"
+          $durationText = & $ffprobePath -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 $uiExport
+          if ($LASTEXITCODE -ne 0) { throw "Unable to measure exported MP4 duration" }
+          $duration = [double]::Parse(($durationText | Select-Object -First 1), [System.Globalization.CultureInfo]::InvariantCulture)
+          if ($duration -lt 5) { throw "Export is too short for audio fade validation: $duration seconds" }
+          function Measure-MeanVolume([double] $start) {
+            $offset = $start.ToString("F3", [System.Globalization.CultureInfo]::InvariantCulture)
+            $report = & $ffmpegPath -hide_banner -nostats -i $uiExport -ss $offset -t 0.5 -map 0:a:0 -af volumedetect -f null NUL 2>&1
+            if ($LASTEXITCODE -ne 0) { throw "Audio volume measurement failed at $offset seconds" }
+            $match = [regex]::Match(($report -join "`n"), 'mean_volume:\s*(-?(?:inf|[0-9]+(?:\.[0-9]+)?))\s*dB', 'IgnoreCase')
+            if (-not $match.Success) { throw "No audio volume measurement at $offset seconds" }
+            if ($match.Groups[1].Value -eq '-inf') { return -100.0 }
+            return [double]::Parse($match.Groups[1].Value, [System.Globalization.CultureInfo]::InvariantCulture)
+          }
+          $startVolume = Measure-MeanVolume 0
+          $middleVolume = Measure-MeanVolume ([Math]::Max(2.5, $duration / 2 - 0.25))
+          $endVolume = Measure-MeanVolume ($duration - 0.5)
+          "start=$startVolume middle=$middleVolume end=$endVolume" | Tee-Object transition-lab-ui-audio-fades.txt | Out-Host
+          if ($startVolume -gt $middleVolume - 5 -or $endVolume -gt $middleVolume - 5) {
+            throw "Audio Fade In/Out was not measurable in exported MP4"
+          }
+          Write-Host "Installed application audio Fade In/Out passed"
           Copy-Item $uiExport transition-lab-ui-export.mp4
           Get-FileHash $uiExport -Algorithm SHA256 | Format-List | Out-File transition-lab-ui-export.sha256.txt
           Write-Host "Installed application Export MP4 end-to-end test passed"
@@ -348,6 +369,7 @@ jobs:
             transition-lab-ui-export.mp4
             transition-lab-ui-export-probe.txt
             transition-lab-ui-audio-probe.txt
+            transition-lab-ui-audio-fades.txt
             transition-lab-ui-export.sha256.txt
             transition-lab-ui-stdout.log
             transition-lab-ui-stderr.log
