@@ -118,6 +118,8 @@ jobs:
           test -f src/transitionlab/frei0r/panels.c
           grep -q 'add_library(transitionlab_panels' src/CMakeLists.txt
           grep -q 'Transition Lab' src/docks/transitionlabdock.cpp
+          grep -q 'slideshow->set(kExportFromProperty, 1)' src/docks/transitionlabdock.cpp
+          grep -q 'Export MP4' src/docks/transitionlabdock.cpp
           git diff --check
 
       - name: Build the verified Transition Lab source
@@ -138,6 +140,12 @@ jobs:
           if (-not $plugin) { throw "Articulated panels plugin was not produced" }
           $melt = Get-ChildItem -Path $exe.Directory.FullName -Filter melt.exe | Select-Object -First 1
           if (-not $melt) { throw "MLT runtime executable was not packaged" }
+          $ffprobePath = "C:\msys64\mingw64\bin\ffprobe.exe"
+          if (-not (Test-Path $ffprobePath)) {
+            $ffprobe = Get-ChildItem -Path $exe.Directory.FullName -Recurse -Filter ffprobe.exe | Select-Object -First 1
+            if (-not $ffprobe) { throw "ffprobe is unavailable for MP4 validation" }
+            $ffprobePath = $ffprobe.FullName
+          }
           $queryReport = Join-Path (Get-Location).Path "transition-lab-mlt-transitions.txt"
           Push-Location $exe.Directory.FullName
           try {
@@ -154,7 +162,7 @@ jobs:
           $renderOutput = Join-Path (Get-Location).Path "transition-lab-panels-render.mp4"
           @'
           <mlt LC_NUMERIC="C" version="7.0.0" root=".">
-            <profile description="Transition Lab smoke test" width="640" height="360" progressive="1" sample_aspect_num="1" sample_aspect_den="1" display_aspect_num="16" display_aspect_den="9" frame_rate_num="25" frame_rate_den="1" colorspace="709"/>
+            <profile description="Transition Lab smoke test" width="1920" height="1080" progressive="1" sample_aspect_num="1" sample_aspect_den="1" display_aspect_num="16" display_aspect_den="9" frame_rate_num="25" frame_rate_den="1" colorspace="709"/>
             <producer id="red" in="0" out="49">
               <property name="mlt_service">color</property>
               <property name="resource">#d02020</property>
@@ -187,6 +195,291 @@ jobs:
           }
           if (-not (Test-Path $renderOutput)) { throw "MLT articulated panels render produced no MP4" }
           if ((Get-Item $renderOutput).Length -lt 1024) { throw "MLT articulated panels render output is unexpectedly small" }
+          $probe = & $ffprobePath -v error -select_streams v:0 -show_entries stream=codec_name,width,height,r_frame_rate -of default=noprint_wrappers=1 $renderOutput 2>&1
+          if ($LASTEXITCODE -ne 0) { throw "ffprobe rejected the rendered MP4 with exit code $LASTEXITCODE" }
+          $probe | Out-File transition-lab-export-probe.txt
+          $probeText = $probe -join "`n"
+          if ($probeText -notmatch '(?m)^codec_name=h264
+          Get-FileHash $exe.FullName -Algorithm SHA256 | Format-List | Out-File transition-lab-foundation-smoke.txt
+          Get-FileHash $plugin.FullName -Algorithm SHA256 | Format-List | Out-File transition-lab-panels-smoke.txt
+          Compress-Archive -Path shotcut-fork\build\Shotcut -DestinationPath transition-lab-foundation-windows-x64.zip -Force
+          $appSource = (Resolve-Path "shotcut-fork\build\Shotcut").Path
+          $installerScript = Join-Path (Get-Location).Path "transition-lab-pilot.iss"
+          @"
+          [Setup]
+          AppId={{F254E53E-8BA3-4C85-92D9-3308D44C51E4}
+          AppName=Transition Lab
+          AppVersion=0.1.0
+          AppPublisher=Transition Lab contributors
+          DefaultDirName={autopf}\Transition Lab
+          DefaultGroupName=Transition Lab
+          ArchitecturesAllowed=x64compatible
+          ArchitecturesInstallIn64BitMode=x64compatible
+          OutputDir=$((Get-Location).Path)
+          OutputBaseFilename=Transition-Lab-0.1.0-Windows-x64-Setup
+          Compression=lzma2
+          SolidCompression=yes
+          WizardStyle=modern
+          UninstallDisplayIcon={app}\shotcut.exe
+          [Files]
+          Source: "$appSource\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+          [Icons]
+          Name: "{autoprograms}\Transition Lab"; Filename: "{app}\shotcut.exe"
+          Name: "{autodesktop}\Transition Lab"; Filename: "{app}\shotcut.exe"; Tasks: desktopicon
+          [Tasks]
+          Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"
+          [Run]
+          Filename: "{app}\shotcut.exe"; Description: "Launch Transition Lab"; Flags: nowait postinstall skipifsilent
+          "@ | Set-Content -Path $installerScript -Encoding utf8
+          $iscc = Get-ChildItem -Path "${env:ProgramFiles(x86)}\Inno Setup *\ISCC.exe" -ErrorAction SilentlyContinue |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $iscc) {
+            choco install innosetup --no-progress -y
+            $iscc = Get-ChildItem -Path "${env:ProgramFiles(x86)}\Inno Setup *\ISCC.exe" -ErrorAction SilentlyContinue |
+              Sort-Object FullName -Descending | Select-Object -First 1
+          }
+          if (-not $iscc) { throw "Inno Setup compiler was not found" }
+          & $iscc.FullName $installerScript
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+          $installer = Get-Item "Transition-Lab-0.1.0-Windows-x64-Setup.exe"
+          if ($installer.Length -lt 1048576) { throw "Installer output is unexpectedly small" }
+          $installerHash = Get-FileHash $installer.FullName -Algorithm SHA256
+          $installerHash | Format-List | Tee-Object -FilePath Transition-Lab-0.1.0-Windows-x64-Setup.sha256.txt | Out-Host
+          $cleanInstall = Join-Path $env:RUNNER_TEMP "TransitionLabCleanInstall"
+          $install = Start-Process -FilePath $installer.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=$cleanInstall" -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Silent installer test failed with exit code $($install.ExitCode)" }
+          $installedExe = Join-Path $cleanInstall "shotcut.exe"
+          if (-not (Test-Path $installedExe)) { throw "Silent installer test did not install shotcut.exe" }
+          $installedPlugin = Get-ChildItem -Path $cleanInstall -Recurse -Filter transitionlab_panels.dll | Select-Object -First 1
+          if (-not $installedPlugin) { throw "Silent installer test did not install transitionlab_panels.dll" }
+          Write-Host "Clean Windows install smoke test passed: $installedExe"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: transition-lab-foundation-windows-x64
+          path: |
+            transition-lab-foundation-windows-x64.zip
+            transition-lab-foundation-smoke.txt
+            transition-lab-panels-smoke.txt
+            transition-lab-mlt-transitions.txt
+            transition-lab-panels-render.mp4
+            transition-lab-panels-render-smoke.txt
+            transition-lab-export-probe.txt
+            Transition-Lab-0.1.0-Windows-x64-Setup.exe
+            Transition-Lab-0.1.0-Windows-x64-Setup.sha256.txt
+          if-no-files-found: error
+          retention-days: 30
+) { throw "Rendered MP4 is not H.264: $probeText" }
+          if ($probeText -notmatch '(?m)^width=1920
+          Get-FileHash $exe.FullName -Algorithm SHA256 | Format-List | Out-File transition-lab-foundation-smoke.txt
+          Get-FileHash $plugin.FullName -Algorithm SHA256 | Format-List | Out-File transition-lab-panels-smoke.txt
+          Compress-Archive -Path shotcut-fork\build\Shotcut -DestinationPath transition-lab-foundation-windows-x64.zip -Force
+          $appSource = (Resolve-Path "shotcut-fork\build\Shotcut").Path
+          $installerScript = Join-Path (Get-Location).Path "transition-lab-pilot.iss"
+          @"
+          [Setup]
+          AppId={{F254E53E-8BA3-4C85-92D9-3308D44C51E4}
+          AppName=Transition Lab
+          AppVersion=0.1.0
+          AppPublisher=Transition Lab contributors
+          DefaultDirName={autopf}\Transition Lab
+          DefaultGroupName=Transition Lab
+          ArchitecturesAllowed=x64compatible
+          ArchitecturesInstallIn64BitMode=x64compatible
+          OutputDir=$((Get-Location).Path)
+          OutputBaseFilename=Transition-Lab-0.1.0-Windows-x64-Setup
+          Compression=lzma2
+          SolidCompression=yes
+          WizardStyle=modern
+          UninstallDisplayIcon={app}\shotcut.exe
+          [Files]
+          Source: "$appSource\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+          [Icons]
+          Name: "{autoprograms}\Transition Lab"; Filename: "{app}\shotcut.exe"
+          Name: "{autodesktop}\Transition Lab"; Filename: "{app}\shotcut.exe"; Tasks: desktopicon
+          [Tasks]
+          Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"
+          [Run]
+          Filename: "{app}\shotcut.exe"; Description: "Launch Transition Lab"; Flags: nowait postinstall skipifsilent
+          "@ | Set-Content -Path $installerScript -Encoding utf8
+          $iscc = Get-ChildItem -Path "${env:ProgramFiles(x86)}\Inno Setup *\ISCC.exe" -ErrorAction SilentlyContinue |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $iscc) {
+            choco install innosetup --no-progress -y
+            $iscc = Get-ChildItem -Path "${env:ProgramFiles(x86)}\Inno Setup *\ISCC.exe" -ErrorAction SilentlyContinue |
+              Sort-Object FullName -Descending | Select-Object -First 1
+          }
+          if (-not $iscc) { throw "Inno Setup compiler was not found" }
+          & $iscc.FullName $installerScript
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+          $installer = Get-Item "Transition-Lab-0.1.0-Windows-x64-Setup.exe"
+          if ($installer.Length -lt 1048576) { throw "Installer output is unexpectedly small" }
+          $installerHash = Get-FileHash $installer.FullName -Algorithm SHA256
+          $installerHash | Format-List | Tee-Object -FilePath Transition-Lab-0.1.0-Windows-x64-Setup.sha256.txt | Out-Host
+          $cleanInstall = Join-Path $env:RUNNER_TEMP "TransitionLabCleanInstall"
+          $install = Start-Process -FilePath $installer.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=$cleanInstall" -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Silent installer test failed with exit code $($install.ExitCode)" }
+          $installedExe = Join-Path $cleanInstall "shotcut.exe"
+          if (-not (Test-Path $installedExe)) { throw "Silent installer test did not install shotcut.exe" }
+          $installedPlugin = Get-ChildItem -Path $cleanInstall -Recurse -Filter transitionlab_panels.dll | Select-Object -First 1
+          if (-not $installedPlugin) { throw "Silent installer test did not install transitionlab_panels.dll" }
+          Write-Host "Clean Windows install smoke test passed: $installedExe"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: transition-lab-foundation-windows-x64
+          path: |
+            transition-lab-foundation-windows-x64.zip
+            transition-lab-foundation-smoke.txt
+            transition-lab-panels-smoke.txt
+            transition-lab-mlt-transitions.txt
+            transition-lab-panels-render.mp4
+            transition-lab-panels-render-smoke.txt
+            Transition-Lab-0.1.0-Windows-x64-Setup.exe
+            Transition-Lab-0.1.0-Windows-x64-Setup.sha256.txt
+          if-no-files-found: error
+          retention-days: 30
+) { throw "Rendered MP4 is not 1920 pixels wide: $probeText" }
+          if ($probeText -notmatch '(?m)^height=1080
+          Get-FileHash $exe.FullName -Algorithm SHA256 | Format-List | Out-File transition-lab-foundation-smoke.txt
+          Get-FileHash $plugin.FullName -Algorithm SHA256 | Format-List | Out-File transition-lab-panels-smoke.txt
+          Compress-Archive -Path shotcut-fork\build\Shotcut -DestinationPath transition-lab-foundation-windows-x64.zip -Force
+          $appSource = (Resolve-Path "shotcut-fork\build\Shotcut").Path
+          $installerScript = Join-Path (Get-Location).Path "transition-lab-pilot.iss"
+          @"
+          [Setup]
+          AppId={{F254E53E-8BA3-4C85-92D9-3308D44C51E4}
+          AppName=Transition Lab
+          AppVersion=0.1.0
+          AppPublisher=Transition Lab contributors
+          DefaultDirName={autopf}\Transition Lab
+          DefaultGroupName=Transition Lab
+          ArchitecturesAllowed=x64compatible
+          ArchitecturesInstallIn64BitMode=x64compatible
+          OutputDir=$((Get-Location).Path)
+          OutputBaseFilename=Transition-Lab-0.1.0-Windows-x64-Setup
+          Compression=lzma2
+          SolidCompression=yes
+          WizardStyle=modern
+          UninstallDisplayIcon={app}\shotcut.exe
+          [Files]
+          Source: "$appSource\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+          [Icons]
+          Name: "{autoprograms}\Transition Lab"; Filename: "{app}\shotcut.exe"
+          Name: "{autodesktop}\Transition Lab"; Filename: "{app}\shotcut.exe"; Tasks: desktopicon
+          [Tasks]
+          Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"
+          [Run]
+          Filename: "{app}\shotcut.exe"; Description: "Launch Transition Lab"; Flags: nowait postinstall skipifsilent
+          "@ | Set-Content -Path $installerScript -Encoding utf8
+          $iscc = Get-ChildItem -Path "${env:ProgramFiles(x86)}\Inno Setup *\ISCC.exe" -ErrorAction SilentlyContinue |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $iscc) {
+            choco install innosetup --no-progress -y
+            $iscc = Get-ChildItem -Path "${env:ProgramFiles(x86)}\Inno Setup *\ISCC.exe" -ErrorAction SilentlyContinue |
+              Sort-Object FullName -Descending | Select-Object -First 1
+          }
+          if (-not $iscc) { throw "Inno Setup compiler was not found" }
+          & $iscc.FullName $installerScript
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+          $installer = Get-Item "Transition-Lab-0.1.0-Windows-x64-Setup.exe"
+          if ($installer.Length -lt 1048576) { throw "Installer output is unexpectedly small" }
+          $installerHash = Get-FileHash $installer.FullName -Algorithm SHA256
+          $installerHash | Format-List | Tee-Object -FilePath Transition-Lab-0.1.0-Windows-x64-Setup.sha256.txt | Out-Host
+          $cleanInstall = Join-Path $env:RUNNER_TEMP "TransitionLabCleanInstall"
+          $install = Start-Process -FilePath $installer.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=$cleanInstall" -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Silent installer test failed with exit code $($install.ExitCode)" }
+          $installedExe = Join-Path $cleanInstall "shotcut.exe"
+          if (-not (Test-Path $installedExe)) { throw "Silent installer test did not install shotcut.exe" }
+          $installedPlugin = Get-ChildItem -Path $cleanInstall -Recurse -Filter transitionlab_panels.dll | Select-Object -First 1
+          if (-not $installedPlugin) { throw "Silent installer test did not install transitionlab_panels.dll" }
+          Write-Host "Clean Windows install smoke test passed: $installedExe"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: transition-lab-foundation-windows-x64
+          path: |
+            transition-lab-foundation-windows-x64.zip
+            transition-lab-foundation-smoke.txt
+            transition-lab-panels-smoke.txt
+            transition-lab-mlt-transitions.txt
+            transition-lab-panels-render.mp4
+            transition-lab-panels-render-smoke.txt
+            Transition-Lab-0.1.0-Windows-x64-Setup.exe
+            Transition-Lab-0.1.0-Windows-x64-Setup.sha256.txt
+          if-no-files-found: error
+          retention-days: 30
+) { throw "Rendered MP4 is not 1080 pixels high: $probeText" }
+          if ($probeText -notmatch '(?m)^r_frame_rate=25/1
+          Get-FileHash $exe.FullName -Algorithm SHA256 | Format-List | Out-File transition-lab-foundation-smoke.txt
+          Get-FileHash $plugin.FullName -Algorithm SHA256 | Format-List | Out-File transition-lab-panels-smoke.txt
+          Compress-Archive -Path shotcut-fork\build\Shotcut -DestinationPath transition-lab-foundation-windows-x64.zip -Force
+          $appSource = (Resolve-Path "shotcut-fork\build\Shotcut").Path
+          $installerScript = Join-Path (Get-Location).Path "transition-lab-pilot.iss"
+          @"
+          [Setup]
+          AppId={{F254E53E-8BA3-4C85-92D9-3308D44C51E4}
+          AppName=Transition Lab
+          AppVersion=0.1.0
+          AppPublisher=Transition Lab contributors
+          DefaultDirName={autopf}\Transition Lab
+          DefaultGroupName=Transition Lab
+          ArchitecturesAllowed=x64compatible
+          ArchitecturesInstallIn64BitMode=x64compatible
+          OutputDir=$((Get-Location).Path)
+          OutputBaseFilename=Transition-Lab-0.1.0-Windows-x64-Setup
+          Compression=lzma2
+          SolidCompression=yes
+          WizardStyle=modern
+          UninstallDisplayIcon={app}\shotcut.exe
+          [Files]
+          Source: "$appSource\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+          [Icons]
+          Name: "{autoprograms}\Transition Lab"; Filename: "{app}\shotcut.exe"
+          Name: "{autodesktop}\Transition Lab"; Filename: "{app}\shotcut.exe"; Tasks: desktopicon
+          [Tasks]
+          Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"
+          [Run]
+          Filename: "{app}\shotcut.exe"; Description: "Launch Transition Lab"; Flags: nowait postinstall skipifsilent
+          "@ | Set-Content -Path $installerScript -Encoding utf8
+          $iscc = Get-ChildItem -Path "${env:ProgramFiles(x86)}\Inno Setup *\ISCC.exe" -ErrorAction SilentlyContinue |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $iscc) {
+            choco install innosetup --no-progress -y
+            $iscc = Get-ChildItem -Path "${env:ProgramFiles(x86)}\Inno Setup *\ISCC.exe" -ErrorAction SilentlyContinue |
+              Sort-Object FullName -Descending | Select-Object -First 1
+          }
+          if (-not $iscc) { throw "Inno Setup compiler was not found" }
+          & $iscc.FullName $installerScript
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+          $installer = Get-Item "Transition-Lab-0.1.0-Windows-x64-Setup.exe"
+          if ($installer.Length -lt 1048576) { throw "Installer output is unexpectedly small" }
+          $installerHash = Get-FileHash $installer.FullName -Algorithm SHA256
+          $installerHash | Format-List | Tee-Object -FilePath Transition-Lab-0.1.0-Windows-x64-Setup.sha256.txt | Out-Host
+          $cleanInstall = Join-Path $env:RUNNER_TEMP "TransitionLabCleanInstall"
+          $install = Start-Process -FilePath $installer.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=$cleanInstall" -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Silent installer test failed with exit code $($install.ExitCode)" }
+          $installedExe = Join-Path $cleanInstall "shotcut.exe"
+          if (-not (Test-Path $installedExe)) { throw "Silent installer test did not install shotcut.exe" }
+          $installedPlugin = Get-ChildItem -Path $cleanInstall -Recurse -Filter transitionlab_panels.dll | Select-Object -First 1
+          if (-not $installedPlugin) { throw "Silent installer test did not install transitionlab_panels.dll" }
+          Write-Host "Clean Windows install smoke test passed: $installedExe"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: transition-lab-foundation-windows-x64
+          path: |
+            transition-lab-foundation-windows-x64.zip
+            transition-lab-foundation-smoke.txt
+            transition-lab-panels-smoke.txt
+            transition-lab-mlt-transitions.txt
+            transition-lab-panels-render.mp4
+            transition-lab-panels-render-smoke.txt
+            Transition-Lab-0.1.0-Windows-x64-Setup.exe
+            Transition-Lab-0.1.0-Windows-x64-Setup.sha256.txt
+          if-no-files-found: error
+          retention-days: 30
+) { throw "Rendered MP4 is not 25 fps: $probeText" }
           Get-FileHash $renderOutput -Algorithm SHA256 | Format-List | Out-File transition-lab-panels-render-smoke.txt
           Get-FileHash $exe.FullName -Algorithm SHA256 | Format-List | Out-File transition-lab-foundation-smoke.txt
           Get-FileHash $plugin.FullName -Algorithm SHA256 | Format-List | Out-File transition-lab-panels-smoke.txt
