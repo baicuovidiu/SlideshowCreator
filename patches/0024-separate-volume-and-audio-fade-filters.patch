@@ -1,0 +1,48 @@
+diff --git a/src/docks/transitionlabdock.cpp b/src/docks/transitionlabdock.cpp
+index f373e1f1..5535eca1 100644
+--- a/src/docks/transitionlabdock.cpp
++++ b/src/docks/transitionlabdock.cpp
+@@ -377,21 +377,32 @@ Mlt::Producer *TransitionLabDock::createSlideshow() const
+     audio->set("length", totalFrames);
+     audio->set_in_and_out(0, totalFrames - 1);
+ 
++    const double gain = m_volume->value() > 0 ? 20.0 * std::log10(m_volume->value() / 100.0) : -60.0;
+     Mlt::Filter volume(MLT.profile(), "volume");
+     if (volume.is_valid()) {
+-        const double gain = m_volume->value() > 0 ? 20.0 * std::log10(m_volume->value() / 100.0) : -60.0;
+-        const int fadeInFrames = qMin(qRound(m_fadeIn->value() * MLT.profile().fps()), totalFrames - 1);
+-        const int fadeOutFrames = qMin(qRound(m_fadeOut->value() * MLT.profile().fps()), totalFrames - 1);
+-        volume.set_in_and_out(0, totalFrames - 1);
+-        volume.anim_set("level", fadeInFrames > 0 ? -60.0 : gain, 0);
+-        if (fadeInFrames > 0)
+-            volume.anim_set("level", gain, fadeInFrames);
+-        if (fadeOutFrames > 0) {
+-            volume.anim_set("level", gain, qMax(0, totalFrames - fadeOutFrames - 1));
+-            volume.anim_set("level", -60.0, totalFrames - 1);
+-        }
++        volume.set("level", gain);
+         audio->attach(volume);
+     }
++    const int fadeInFrames = qMin(qRound(m_fadeIn->value() * MLT.profile().fps()), totalFrames - 1);
++    if (fadeInFrames > 0) {
++        Mlt::Filter fadeIn(MLT.profile(), "volume");
++        if (fadeIn.is_valid()) {
++            fadeIn.set_in_and_out(0, totalFrames - 1);
++            fadeIn.anim_set("level", -60.0, 0);
++            fadeIn.anim_set("level", 0.0, fadeInFrames);
++            audio->attach(fadeIn);
++        }
++    }
++    const int fadeOutFrames = qMin(qRound(m_fadeOut->value() * MLT.profile().fps()), totalFrames - 1);
++    if (fadeOutFrames > 0) {
++        Mlt::Filter fadeOut(MLT.profile(), "volume");
++        if (fadeOut.is_valid()) {
++            fadeOut.set_in_and_out(0, totalFrames - 1);
++            fadeOut.anim_set("level", 0.0, qMax(0, totalFrames - fadeOutFrames - 1));
++            fadeOut.anim_set("level", -60.0, totalFrames - 1);
++            audio->attach(fadeOut);
++        }
++    }
+ 
+     auto *result = new Mlt::Tractor(MLT.profile());
+     result->set(kExportFromProperty, 1);

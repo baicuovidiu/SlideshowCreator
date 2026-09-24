@@ -173,3 +173,9 @@ Acest build este primul pilot cu exportul confirmat prin traseul aplicației ins
 
 - #42 https://github.com/baicuovidiu/SlideshowCreator/actions/runs/36049627067: compilarea și instalarea au trecut, dar testul Fade Out a repetat rezultatul #41: început −75 dB, mijloc −28 dB, final −27,8 dB. Limitarea inițială a tractorului a fost insuficientă; nici acest installer nu este validat pentru fade.
 - Următoarea corecție fixează și lungimea pistei audio și reconfirmă lungimea tractorului după plantarea mixului; testul măsoară explicit durata MP4-ului și respinge exporturile mai lungi decât cele două fotografii. Se imprimă și lungimile producătorilor MLT la eșec. Acestea sunt ipoteze testate de următorul build, nu rezultate declarate.
+
+## Actualizare 25 septembrie 2026 — diagnosticul #43, încercarea 2
+
+- Compilarea și instalarea au trecut. Exportul instalat are 8,490667 secunde, exact 212 cadre pentru slideshow, pistă audio și rezultat. Ipoteza duratei excesive este infirmată.
+- Valorile rămân început −75 dB, mijloc −28 dB, final −27,8 dB: Fade In funcționează, Fade Out din animația combinată nu este aplicat.
+- Următoarea corecție folosește trei filtre MLT independente: volum constant, rampă Fade In și rampă Fade Out. Aceasta urmează structura filtrelor audio native Shotcut. Rezultatul rămâne nevalidat până la următorul test Windows instalat.
