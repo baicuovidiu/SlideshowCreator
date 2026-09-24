@@ -119,6 +119,9 @@ jobs:
           grep -q 'add_library(transitionlab_panels' src/CMakeLists.txt
           grep -q 'Transition Lab' src/docks/transitionlabdock.cpp
           grep -q 'slideshow->set(kExportFromProperty, 1)' src/docks/transitionlabdock.cpp
+          grep -q 'slideshow->set(kShotcutVirtualClip, 1)' src/docks/transitionlabdock.cpp
+          grep -q 'result->set(kExportFromProperty, 1)' src/docks/transitionlabdock.cpp
+          grep -q 'result->set(kShotcutVirtualClip, 1)' src/docks/transitionlabdock.cpp
           grep -q 'Export MP4' src/docks/transitionlabdock.cpp
           git diff --check
 
