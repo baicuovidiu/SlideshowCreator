@@ -1,0 +1,111 @@
+diff --git a/src/docks/encodedock.cpp b/src/docks/encodedock.cpp
+index 48baa405..63595782 100644
+--- a/src/docks/encodedock.cpp
++++ b/src/docks/encodedock.cpp
+@@ -42,6 +42,7 @@
+ #include <QtMath>
+ #include <QtWidgets>
+ #include <QtXml>
++#include <stdio.h>
+ 
+ // formulas to map absolute value ranges to percentages as int
+ #define TO_ABSOLUTE(min, max, rel) qRound(float(min) + float((max) - (min)) * float(rel) / 100.0f)
+@@ -2045,6 +2046,10 @@ void EncodeDock::on_presetsTree_activated(const QModelIndex &index)
+ 
+ void EncodeDock::on_encodeButton_clicked()
+ {
++    if (qEnvironmentVariableIsSet("TRANSITION_LAB_E2E_PHOTOS")) {
++        fprintf(stderr, "TRANSITION_LAB_E2E: encode slot producer=%p\n", static_cast<void *>(MLT.producer()));
++        fflush(stderr);
++    }
+     if (!MLT.producer())
+         return;
+     if (m_immediateJob) {
+@@ -2098,6 +2103,10 @@ void EncodeDock::on_encodeButton_clicked()
+             directory += "/" + projectBaseName;
+         }
+         QString newName = qEnvironmentVariable("TRANSITION_LAB_E2E_OUTPUT");
++        if (qEnvironmentVariableIsSet("TRANSITION_LAB_E2E_PHOTOS")) {
++            fprintf(stderr, "TRANSITION_LAB_E2E: export filename=%s\n", qPrintable(newName));
++            fflush(stderr);
++        }
+         if (newName.isEmpty()) {
+             newName = QFileDialog::getSaveFileName(this,
+                                                    caption,
+diff --git a/src/docks/transitionlabdock.cpp b/src/docks/transitionlabdock.cpp
+index ddacdc2d..069cc95a 100644
+--- a/src/docks/transitionlabdock.cpp
++++ b/src/docks/transitionlabdock.cpp
+@@ -37,6 +37,7 @@
+ #include <QVBoxLayout>
+ 
+ #include <cmath>
++#include <stdio.h>
+ 
+ TransitionLabDock::TransitionLabDock(QWidget *parent)
+     : QDockWidget(tr("Transition Lab"), parent)
+@@ -203,10 +204,15 @@ int TransitionLabDock::volumePercent() const
+ 
+ void TransitionLabDock::runExportTest(const QStringList &files)
+ {
++    fprintf(stderr, "TRANSITION_LAB_E2E: runExportTest received %d paths\n", int(files.size()));
++    fflush(stderr);
+     for (const QString &file : files) {
+         QImageReader reader(file);
+-        if (!reader.canRead())
++        if (!reader.canRead()) {
++            fprintf(stderr, "TRANSITION_LAB_E2E: image rejected: %s\n", qPrintable(file));
++            fflush(stderr);
+             continue;
++        }
+         auto *item = new QListWidgetItem(QIcon(file), QFileInfo(file).fileName());
+         item->setData(Qt::UserRole, file);
+         item->setData(Qt::UserRole + 1, 0);
+@@ -214,9 +220,13 @@ void TransitionLabDock::runExportTest(const QStringList &files)
+         item->setData(Qt::UserRole + 3, 0);
+         m_photoList->addItem(item);
+     }
++    fprintf(stderr, "TRANSITION_LAB_E2E: accepted %d photos\n", m_photoList->count());
++    fflush(stderr);
+     if (m_photoList->count() >= 2) {
+         m_photoList->setCurrentRow(0);
+         updateTransitionEditor();
++        fprintf(stderr, "TRANSITION_LAB_E2E: export button enabled=%d\n", int(m_exportButton->isEnabled()));
++        fflush(stderr);
+         m_exportButton->click();
+     }
+ }
+@@ -395,6 +405,10 @@ void TransitionLabDock::previewSlideshow()
+ void TransitionLabDock::prepareExport()
+ {
+     Mlt::Producer *slideshow = createSlideshow();
++    if (qEnvironmentVariableIsSet("TRANSITION_LAB_E2E_PHOTOS")) {
++        fprintf(stderr, "TRANSITION_LAB_E2E: prepareExport producer=%p\n", static_cast<void *>(slideshow));
++        fflush(stderr);
++    }
+     if (slideshow)
+         emit exportRequested(slideshow);
+ }
+diff --git a/src/mainwindow.cpp b/src/mainwindow.cpp
+index 35c8b4a9..ea9bfa3a 100644
+--- a/src/mainwindow.cpp
++++ b/src/mainwindow.cpp
+@@ -68,6 +68,7 @@
+ #include "shotcut_mlt_properties.h"
+ #include "util.h"
+ #include "videowidget.h"
++#include <stdio.h>
+ #include "widgets/alsawidget.h"
+ #include "widgets/avformatproducerwidget.h"
+ #include "widgets/avfoundationproducerwidget.h"
+@@ -283,6 +284,10 @@ void MainWindow::applyTransitionLabMode()
+             &TransitionLabDock::exportRequested,
+             this,
+             [this](Mlt::Producer *slideshow) {
++                if (qEnvironmentVariableIsSet("TRANSITION_LAB_E2E_PHOTOS")) {
++                    fprintf(stderr, "TRANSITION_LAB_E2E: exportRequested received producer\n");
++                    fflush(stderr);
++                }
+                 open(slideshow, false);
+                 m_encodeDock->show();
+                 m_encodeDock->raise();
