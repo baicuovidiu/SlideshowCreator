@@ -107,11 +107,11 @@ Regulă: raportul trebuie să separe explicit:
 
 ## Stare funcțională adevărată
 
-Verificat practic de utilizator:
+Verificat practic de utilizator pe versiuni anterioare (#21–#25):
 - instalare: DA;
 - import patru fotografii: DA;
 - preview: DA;
-- export MP4: NU;
+- export MP4: NU în acele versiuni; #38 a trecut testul automat, proba pe calculatorul utilizatorului este în așteptare;
 - cele 15 familii de tranziții: NU; doar Panouri articulate are motor implementat/testat parțial;
 - audio în export: NU este confirmat practic;
 - NVENC implicit și avertizarea de fallback: NU sunt confirmate;
@@ -133,7 +133,7 @@ Nu se livrează un alt installer drept „funcțional” până când sunt înde
 
 ## Următorul pas
 
-Installerul din buildul #29 este candidatul curent pentru test practic. Nu se adaugă alte tranziții înainte ca utilizatorul să confirme că, din interfața instalată, butonul Export MP4 creează fișierul slideshow. Dacă testul practic eșuează, se păstrează materialele și pașii exacți ai testului și se auditează traseul GUI fără a declara testul automat drept echivalent cu validarea utilizatorului.
+Această secțiune descria situația de după #29 și este înlocuită de actualizarea pentru #38 de la finalul documentului. Următorul pas este verificarea practică a pilotului #38 cu fotografiile utilizatorului, apoi extinderea treptată a tranzițiilor și validarea audio, NVENC și concordanței preview/export.
 
 ## Actualizare 24 septembrie 2026 — diagnostic export prin aplicația instalată
 
