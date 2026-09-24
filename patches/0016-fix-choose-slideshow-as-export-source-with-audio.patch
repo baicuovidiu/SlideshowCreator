@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Thu, 24 Sep 2026 07:00:00 +0000
+Subject: [PATCH] fix: expose slideshow source for export with and without audio
+
+---
+ src/docks/transitionlabdock.cpp | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/docks/transitionlabdock.cpp b/src/docks/transitionlabdock.cpp
+--- a/src/docks/transitionlabdock.cpp
++++ b/src/docks/transitionlabdock.cpp
+@@ -274,6 +274,7 @@
+     const int framesPerPhoto = qRound(5.0 * MLT.profile().fps());
+     auto *slideshow = new Mlt::Playlist(MLT.profile());
+     slideshow->set(kExportFromProperty, 1);
++    slideshow->set(kShotcutVirtualClip, 1);
+     for (const QString &photo : photos) {
+         Mlt::Producer producer(MLT.profile(), photo.toUtf8().constData());
+         if (!producer.is_valid()) {
+@@ -350,6 +351,8 @@
+     }
+ 
+     auto *result = new Mlt::Tractor(MLT.profile());
++    result->set(kExportFromProperty, 1);
++    result->set(kShotcutVirtualClip, 1);
+     result->set_track(*slideshow, 0);
+     result->set_track(*audio, 1);
+     Mlt::Transition mix(MLT.profile(), "mix");
+-- 
+2.51.1
