@@ -275,6 +275,12 @@ jobs:
             $photoFiles += $path
           }
           $uiExport = Join-Path $e2eDir "transition-lab-ui-export.mp4"
+          $ffmpegPath = Join-Path (Split-Path $ffprobePath) "ffmpeg.exe"
+          if (-not (Test-Path $ffmpegPath)) { throw "ffmpeg is unavailable for audio test input" }
+          $audioInput = Join-Path $e2eDir "music-test.wav"
+          & $ffmpegPath -hide_banner -loglevel error -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=12" -ac 2 -c:a pcm_s16le -y $audioInput
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $audioInput)) { throw "Audio test input was not produced" }
+          $env:TRANSITION_LAB_E2E_AUDIO = $audioInput
           $env:TRANSITION_LAB_E2E_PHOTOS = $photoFiles -join ";"
           $env:TRANSITION_LAB_E2E_OUTPUT = $uiExport
           $env:APPDATA = Join-Path $e2eDir "AppData"
@@ -316,7 +322,65 @@ jobs:
           if ($uiProbeText -notmatch '(?m)^codec_name=h264$') { throw "UI export is not H.264: $uiProbeText" }
           if ($uiProbeText -notmatch '(?m)^width=1920$') { throw "UI export is not 1920 pixels wide: $uiProbeText" }
           if ($uiProbeText -notmatch '(?m)^height=1080$') { throw "UI export is not 1080 pixels high: $uiProbeText" }
-          if ($uiProbeText -notmatch '(?m)^r_frame_rate=(25|30)/1$') { throw "UI export is not 25 or 30 fps: $uiProbeText" }
+          if ($uiProbeText -notmatch '(?m)^r_frame_rate=(25|30)/1
+          Get-FileHash $uiExport -Algorithm SHA256 | Format-List | Out-File transition-lab-ui-export.sha256.txt
+          Write-Host "Installed application Export MP4 end-to-end test passed"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: transition-lab-foundation-windows-x64
+          path: |
+            transition-lab-foundation-windows-x64.zip
+            transition-lab-foundation-smoke.txt
+            transition-lab-panels-smoke.txt
+            transition-lab-mlt-transitions.txt
+            transition-lab-panels-render.mp4
+            transition-lab-panels-render-smoke.txt
+            transition-lab-export-probe.txt
+            transition-lab-ui-export.mp4
+            transition-lab-ui-export-probe.txt
+            transition-lab-ui-audio-probe.txt
+            transition-lab-ui-export.sha256.txt
+            transition-lab-ui-stdout.log
+            transition-lab-ui-stderr.log
+            Transition-Lab-0.1.0-Windows-x64-Setup.exe
+            Transition-Lab-0.1.0-Windows-x64-Setup.sha256.txt
+          if-no-files-found: error
+          retention-days: 30
+          if: always()
+) { throw "UI export is not 25 or 30 fps: $uiProbeText" }
+          $audioProbe = & $ffprobePath -v error -select_streams a:0 -show_entries stream=codec_name,sample_rate -of default=noprint_wrappers=1 $uiExport 2>&1
+          if ($LASTEXITCODE -ne 0) { throw "ffprobe rejected the installed application audio stream" }
+          $audioProbe | Out-File transition-lab-ui-audio-probe.txt
+          if (($audioProbe -join "`n") -notmatch '(?m)^codec_name=aac
+          Get-FileHash $uiExport -Algorithm SHA256 | Format-List | Out-File transition-lab-ui-export.sha256.txt
+          Write-Host "Installed application Export MP4 end-to-end test passed"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: transition-lab-foundation-windows-x64
+          path: |
+            transition-lab-foundation-windows-x64.zip
+            transition-lab-foundation-smoke.txt
+            transition-lab-panels-smoke.txt
+            transition-lab-mlt-transitions.txt
+            transition-lab-panels-render.mp4
+            transition-lab-panels-render-smoke.txt
+            transition-lab-export-probe.txt
+            transition-lab-ui-export.mp4
+            transition-lab-ui-export-probe.txt
+            transition-lab-ui-export.sha256.txt
+            transition-lab-ui-stdout.log
+            transition-lab-ui-stderr.log
+            Transition-Lab-0.1.0-Windows-x64-Setup.exe
+            Transition-Lab-0.1.0-Windows-x64-Setup.sha256.txt
+          if-no-files-found: error
+          retention-days: 30
+          if: always()
+) {
+            throw "Installed application export has no AAC music stream: $($audioProbe -join ', ')"
+          }
+          Write-Host "Installed application export includes AAC music"
           Copy-Item $uiExport transition-lab-ui-export.mp4
           Get-FileHash $uiExport -Algorithm SHA256 | Format-List | Out-File transition-lab-ui-export.sha256.txt
           Write-Host "Installed application Export MP4 end-to-end test passed"

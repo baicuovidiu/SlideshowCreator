@@ -1,0 +1,21 @@
+diff --git a/src/docks/transitionlabdock.cpp b/src/docks/transitionlabdock.cpp
+index 069cc95a..9a7b989a 100644
+--- a/src/docks/transitionlabdock.cpp
++++ b/src/docks/transitionlabdock.cpp
+@@ -222,6 +222,16 @@ void TransitionLabDock::runExportTest(const QStringList &files)
+     }
+     fprintf(stderr, "TRANSITION_LAB_E2E: accepted %d photos\n", m_photoList->count());
+     fflush(stderr);
++    const QString testAudio = qEnvironmentVariable("TRANSITION_LAB_E2E_AUDIO");
++    if (!testAudio.isEmpty()) {
++        if (!QFileInfo::exists(testAudio)) {
++            fprintf(stderr, "TRANSITION_LAB_E2E: audio file missing: %s\n", qPrintable(testAudio));
++            fflush(stderr);
++            return;
++        }
++        m_audioFile = testAudio;
++        m_audioLabel->setText(QFileInfo(testAudio).fileName());
++    }
+     if (m_photoList->count() >= 2) {
+         m_photoList->setCurrentRow(0);
+         updateTransitionEditor();
