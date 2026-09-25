@@ -1,0 +1,85 @@
+diff --git a/src/docks/transitionlabdock.cpp b/src/docks/transitionlabdock.cpp
+index 782a1a3a..6a95eb4e 100644
+--- a/src/docks/transitionlabdock.cpp
++++ b/src/docks/transitionlabdock.cpp
+@@ -377,47 +377,9 @@ Mlt::Producer *TransitionLabDock::createSlideshow() const
+     audio->set("length", totalFrames);
+     audio->set_in_and_out(0, totalFrames - 1);
+ 
+-    Mlt::Filter volume(MLT.profile(), "volume");
+-    if (volume.is_valid()) {
+-        volume.set("gain", m_volume->value() / 100.0);
+-        audio->attach(volume);
+-    }
+     const double fps = MLT.profile().fps();
+     const int fadeInFrames = qMin(qRound(m_fadeIn->value() * fps), totalFrames - 1);
+-    if (fadeInFrames > 0) {
+-        Mlt::Filter fadeIn(MLT.profile(), "avfilter.afade");
+-        if (!fadeIn.is_valid()) {
+-            delete audio;
+-            delete slideshow;
+-            return nullptr;
+-        }
+-        fadeIn.set("av.type", "in");
+-        fadeIn.set("av.start_time", 0.0);
+-        fadeIn.set("av.duration", fadeInFrames / fps);
+-        audio->attach(fadeIn);
+-    }
+     const int fadeOutFrames = qMin(qRound(m_fadeOut->value() * fps), totalFrames - 1);
+-    if (fadeOutFrames > 0) {
+-        Mlt::Filter fadeOut(MLT.profile(), "avfilter.afade");
+-        if (!fadeOut.is_valid()) {
+-            delete audio;
+-            delete slideshow;
+-            return nullptr;
+-        }
+-        const int fadeOutStart = qMax(0, totalFrames - fadeOutFrames);
+-        fadeOut.set("av.type", "out");
+-        fadeOut.set("av.start_time", fadeOutStart / fps);
+-        fadeOut.set("av.duration", fadeOutFrames / fps);
+-        audio->attach(fadeOut);
+-        if (qEnvironmentVariableIsSet("TRANSITION_LAB_E2E_OUTPUT")) {
+-            fprintf(stderr,
+-                    "TRANSITION_LAB_E2E: fade_in_frames=%d fade_out_frames=%d fade_out_start=%d fps=%.3f\n",
+-                    fadeInFrames,
+-                    fadeOutFrames,
+-                    fadeOutStart,
+-                    fps);
+-        }
+-    }
+ 
+     auto *result = new Mlt::Tractor(MLT.profile());
+     result->set(kExportFromProperty, 1);
+@@ -432,6 +394,32 @@ Mlt::Producer *TransitionLabDock::createSlideshow() const
+         mix.set("always_active", 1);
+         result->plant_transition(mix, 0, 1);
+     }
++    // Apply the envelope to the composed producer, not the source song. Some
++    // audio producers retain their original timeline after trimming, which
++    // makes an end keyframe fall beyond the exported slideshow.
++    Mlt::Filter volume(MLT.profile(), "volume");
++    if (!volume.is_valid()) {
++        delete result;
++        return nullptr;
++    }
++    const double gain = m_volume->value() > 0 ? 20.0 * std::log10(m_volume->value() / 100.0) : -60.0;
++    volume.set_in_and_out(0, totalFrames - 1);
++    volume.anim_set("level", fadeInFrames > 0 ? -60.0 : gain, 0);
++    if (fadeInFrames > 0)
++        volume.anim_set("level", gain, fadeInFrames);
++    if (fadeOutFrames > 0) {
++        volume.anim_set("level", gain, qMax(0, totalFrames - fadeOutFrames));
++        volume.anim_set("level", -60.0, totalFrames - 1);
++    }
++    result->attach(volume);
++    if (qEnvironmentVariableIsSet("TRANSITION_LAB_E2E_OUTPUT")) {
++        fprintf(stderr,
++                "TRANSITION_LAB_E2E: result fade_in_frames=%d fade_out_frames=%d fade_out_start=%d fps=%.3f\n",
++                fadeInFrames,
++                fadeOutFrames,
++                qMax(0, totalFrames - fadeOutFrames),
++                fps);
++    }
+     result->set("length", totalFrames);
+     result->set_in_and_out(0, totalFrames - 1);
+     if (qEnvironmentVariableIsSet("TRANSITION_LAB_E2E_OUTPUT")) {

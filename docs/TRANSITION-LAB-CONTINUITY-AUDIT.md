@@ -189,3 +189,8 @@ Acest build este primul pilot cu exportul confirmat prin traseul aplicației ins
 
 - #45 a compilat și instalat aplicația, dar Fade Out a rămas absent. MP4-ul are 8,490667 secunde și 212 cadre; valorile măsurate au fost început −41,4 dB, mijloc −26,9 dB, final −26,7 dB. Rampa nativă MLT bazată pe `volume gain/end` nu atenuează finalul acestei surse audio.
 - Următoarea corecție înlocuiește exclusiv rampele de fade cu filtrul FFmpeg dedicat `avfilter.afade`, configurat în secunde pe întregul flux audio. Dacă filtrul nu este disponibil în pachetul MLT, construirea slideshow-ului eșuează explicit, în loc să exporte fără fade. Rezultatul este nevalidat până la testul Windows instalat.
+
+## Actualizare 25 septembrie 2026 — rezultatul #46
+
+- #46 a compilat și instalat aplicația, iar exportul are în continuare 8,490667 secunde și 212 cadre. Filtrul `avfilter.afade` a primit 50 de cadre pentru fiecare fade și startul Fade Out la cadrul 162, dar măsurarea a rămas început −40,3 dB, mijloc −26,8 dB, final −26,7 dB. Fade Out nu este aplicat; installerul #46 nu este validat.
+- Diagnosticul indică faptul că filtrul atașat direct sursei audio nu urmărește capătul cronologiei exportate. Următoarea corecție mută o singură anvelopă de volum animată pe tractorul final, după compunerea pistelor. Astfel, pozițiile 0–211 sunt exact pozițiile MP4-ului. Rezultatul este nevalidat până la testul Windows instalat.
