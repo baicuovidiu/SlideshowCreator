@@ -1,0 +1,59 @@
+diff --git a/src/docks/transitionlabdock.cpp b/src/docks/transitionlabdock.cpp
+index 12e2746c..782a1a3a 100644
+--- a/src/docks/transitionlabdock.cpp
++++ b/src/docks/transitionlabdock.cpp
+@@ -382,24 +382,40 @@ Mlt::Producer *TransitionLabDock::createSlideshow() const
+         volume.set("gain", m_volume->value() / 100.0);
+         audio->attach(volume);
+     }
+-    const int fadeInFrames = qMin(qRound(m_fadeIn->value() * MLT.profile().fps()), totalFrames - 1);
++    const double fps = MLT.profile().fps();
++    const int fadeInFrames = qMin(qRound(m_fadeIn->value() * fps), totalFrames - 1);
+     if (fadeInFrames > 0) {
+-        Mlt::Filter fadeIn(MLT.profile(), "volume");
+-        if (fadeIn.is_valid()) {
+-            fadeIn.set_in_and_out(0, fadeInFrames);
+-            fadeIn.set("gain", 0.0);
+-            fadeIn.set("end", 1.0);
+-            audio->attach(fadeIn);
++        Mlt::Filter fadeIn(MLT.profile(), "avfilter.afade");
++        if (!fadeIn.is_valid()) {
++            delete audio;
++            delete slideshow;
++            return nullptr;
+         }
++        fadeIn.set("av.type", "in");
++        fadeIn.set("av.start_time", 0.0);
++        fadeIn.set("av.duration", fadeInFrames / fps);
++        audio->attach(fadeIn);
+     }
+-    const int fadeOutFrames = qMin(qRound(m_fadeOut->value() * MLT.profile().fps()), totalFrames - 1);
++    const int fadeOutFrames = qMin(qRound(m_fadeOut->value() * fps), totalFrames - 1);
+     if (fadeOutFrames > 0) {
+-        Mlt::Filter fadeOut(MLT.profile(), "volume");
+-        if (fadeOut.is_valid()) {
+-            fadeOut.set_in_and_out(qMax(0, totalFrames - fadeOutFrames - 1), totalFrames - 1);
+-            fadeOut.set("gain", 1.0);
+-            fadeOut.set("end", 0.0);
+-            audio->attach(fadeOut);
++        Mlt::Filter fadeOut(MLT.profile(), "avfilter.afade");
++        if (!fadeOut.is_valid()) {
++            delete audio;
++            delete slideshow;
++            return nullptr;
++        }
++        const int fadeOutStart = qMax(0, totalFrames - fadeOutFrames);
++        fadeOut.set("av.type", "out");
++        fadeOut.set("av.start_time", fadeOutStart / fps);
++        fadeOut.set("av.duration", fadeOutFrames / fps);
++        audio->attach(fadeOut);
++        if (qEnvironmentVariableIsSet("TRANSITION_LAB_E2E_OUTPUT")) {
++            fprintf(stderr,
++                    "TRANSITION_LAB_E2E: fade_in_frames=%d fade_out_frames=%d fade_out_start=%d fps=%.3f\n",
++                    fadeInFrames,
++                    fadeOutFrames,
++                    fadeOutStart,
++                    fps);
+         }
+     }
+ 
