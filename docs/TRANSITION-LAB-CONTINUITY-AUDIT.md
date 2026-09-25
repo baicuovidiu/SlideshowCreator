@@ -179,3 +179,8 @@ Acest build este primul pilot cu exportul confirmat prin traseul aplicației ins
 - Compilarea și instalarea au trecut. Exportul instalat are 8,490667 secunde, exact 212 cadre pentru slideshow, pistă audio și rezultat. Ipoteza duratei excesive este infirmată.
 - Valorile rămân început −75 dB, mijloc −28 dB, final −27,8 dB: Fade In funcționează, Fade Out din animația combinată nu este aplicat.
 - Următoarea corecție folosește trei filtre MLT independente: volum constant, rampă Fade In și rampă Fade Out. Aceasta urmează structura filtrelor audio native Shotcut. Rezultatul rămâne nevalidat până la următorul test Windows instalat.
+
+## Actualizare 25 septembrie 2026 — rezultatul #44
+
+- #44 a compilat și instalat aplicația, dar a repetat: MP4 8,490667 secunde, început −75 dB, mijloc −28 dB, final −27,8 dB. Nici separarea în animații multiple pe proprietatea `level` nu a produs Fade Out.
+- Următoarea corecție folosește exact mecanismul presetului MLT `volume/fade_out`: filtrul este activ numai în ultimele două secunde, cu `gain=1` și `end=0`. Fade In folosește simetric `gain=0`, `end=1`, iar volumul general rămâne filtru separat. Rezultatul este nevalidat până la următorul build.

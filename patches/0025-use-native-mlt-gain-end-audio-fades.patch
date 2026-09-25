@@ -1,0 +1,41 @@
+diff --git a/src/docks/transitionlabdock.cpp b/src/docks/transitionlabdock.cpp
+index 5535eca1..12e2746c 100644
+--- a/src/docks/transitionlabdock.cpp
++++ b/src/docks/transitionlabdock.cpp
+@@ -377,19 +377,18 @@ Mlt::Producer *TransitionLabDock::createSlideshow() const
+     audio->set("length", totalFrames);
+     audio->set_in_and_out(0, totalFrames - 1);
+ 
+-    const double gain = m_volume->value() > 0 ? 20.0 * std::log10(m_volume->value() / 100.0) : -60.0;
+     Mlt::Filter volume(MLT.profile(), "volume");
+     if (volume.is_valid()) {
+-        volume.set("level", gain);
++        volume.set("gain", m_volume->value() / 100.0);
+         audio->attach(volume);
+     }
+     const int fadeInFrames = qMin(qRound(m_fadeIn->value() * MLT.profile().fps()), totalFrames - 1);
+     if (fadeInFrames > 0) {
+         Mlt::Filter fadeIn(MLT.profile(), "volume");
+         if (fadeIn.is_valid()) {
+-            fadeIn.set_in_and_out(0, totalFrames - 1);
+-            fadeIn.anim_set("level", -60.0, 0);
+-            fadeIn.anim_set("level", 0.0, fadeInFrames);
++            fadeIn.set_in_and_out(0, fadeInFrames);
++            fadeIn.set("gain", 0.0);
++            fadeIn.set("end", 1.0);
+             audio->attach(fadeIn);
+         }
+     }
+@@ -397,9 +396,9 @@ Mlt::Producer *TransitionLabDock::createSlideshow() const
+     if (fadeOutFrames > 0) {
+         Mlt::Filter fadeOut(MLT.profile(), "volume");
+         if (fadeOut.is_valid()) {
+-            fadeOut.set_in_and_out(0, totalFrames - 1);
+-            fadeOut.anim_set("level", 0.0, qMax(0, totalFrames - fadeOutFrames - 1));
+-            fadeOut.anim_set("level", -60.0, totalFrames - 1);
++            fadeOut.set_in_and_out(qMax(0, totalFrames - fadeOutFrames - 1), totalFrames - 1);
++            fadeOut.set("gain", 1.0);
++            fadeOut.set("end", 0.0);
+             audio->attach(fadeOut);
+         }
+     }
